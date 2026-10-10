@@ -365,6 +365,7 @@ struct el_node {
 	float jitter;
 	struct el_instance *instp;
 	struct el_pvt *pvt;
+	int ready; /* Fully initialized and available for packet processing; protected by el_nodelist_lock. */
 	struct timeval last_packet_time;
 	uint32_t rx_audio_packets;
 	uint32_t tx_audio_packets;
@@ -458,7 +459,7 @@ struct el_instance {
 	uint32_t tx_ctrl_packets;
 	uint32_t rx_bad_packets;
 	int timeout_time;
-	struct el_node *current_talker;
+	struct el_node *current_talker; /* owns an AO2 reference while non-NULL; protected by the instance lock */
 	struct timeval current_talker_start_time;
 	struct timeval current_talker_last_time;
 	pthread_t el_reader_thread;
@@ -812,7 +813,7 @@ static struct eldb *el_db_find_ipaddr(const char *ipaddr)
 
 /*!
  * \brief Delete a node from the internal echolink users database.
- * \note Must be called locked.
+ * \note Must be called with el_db_lock held.
  * \param nodenum		Pointer to node to delete.
  */
 static void el_db_delete_entries(struct eldb *node)
@@ -849,7 +850,7 @@ static void el_db_delete_entries(struct eldb *node)
 /*!
  * \brief Add a node to the internal echolink users database.
  * The node is added to the three internal indexes.
- * \note Must be called locked.
+ * \note Must be called with el_db_lock held.
  * \param nodenum		Buffer to node number.
  * \param ipaddr		Buffer to ip address.
  * \param callsign		Buffer to callsign.
@@ -918,13 +919,15 @@ static int lookup_node_by_callsign(const char *callsign, struct eldb *result)
 		return 1;
 	} else {
 		struct eldb *found_node;
+
 		ast_mutex_lock(&el_db_lock);
 		found_node = el_db_find_callsign(callsign);
-		ast_mutex_unlock(&el_db_lock);
 		if (found_node) {
 			memcpy(result, found_node, sizeof(*result));
+			ast_mutex_unlock(&el_db_lock);
 			return 1;
 		}
+		ast_mutex_unlock(&el_db_lock);
 	}
 
 	return 0;
@@ -956,13 +959,15 @@ static int lookup_node_by_nodenum(const char *nodenum, struct eldb *result)
 		return 1;
 	} else {
 		struct eldb *found_node;
+
 		ast_mutex_lock(&el_db_lock);
 		found_node = el_db_find_nodenum(nodenum);
-		ast_mutex_unlock(&el_db_lock);
 		if (found_node) {
 			memcpy(result, found_node, sizeof(*result));
+			ast_mutex_unlock(&el_db_lock);
 			return 1;
 		}
+		ast_mutex_unlock(&el_db_lock);
 	}
 
 	return 0;
@@ -1432,7 +1437,6 @@ static void el_destroy(void *obj)
 	if (p->linkstr) {
 		ast_free(p->linkstr);
 	}
-
 	p->linkstr = NULL;
 
 	ast_mutex_lock(&el_nodelist_lock);
@@ -1545,8 +1549,8 @@ static int el_hangup(struct ast_channel *chan)
 	}
 
 	ast_channel_tech_pvt_set(chan, NULL);
-	ao2_ref(p, -1);
 	ast_setstate(chan, AST_STATE_DOWN);
+	ao2_ref(p, -1);
 
 	return 0;
 }
@@ -1704,23 +1708,24 @@ static int el_text(struct ast_channel *chan, const char *text)
 	char *cmd, *arg1, *arg4;
 	char *ptr, *saveptr, *cp;
 	char buf[5120], str[200], *strs[MAXLINKSTRS];
+	struct ast_str *new_linkstr = NULL;
+	struct ast_str *old_linkstr;
 	int i, j, k, x;
 
 	/* see if we are receiving a link text message */
 	if (p->instp && (text[0] == 'L')) {
 		if (strlen(text) < 3) {
-			if (p->linkstr) {
-				ast_free(p->linkstr);
-				p->linkstr = NULL;
+			ast_mutex_lock(&p->lock);
+			old_linkstr = p->linkstr;
+			p->linkstr = NULL;
+			ast_mutex_unlock(&p->lock);
+			if (old_linkstr) {
+				ast_free(old_linkstr);
 				ast_mutex_lock(&el_nodelist_lock);
 				twalk(el_node_list, send_info);
 				ast_mutex_unlock(&el_nodelist_lock);
 			}
 			return 0;
-		}
-		if (p->linkstr) {
-			ast_free(p->linkstr);
-			p->linkstr = NULL;
 		}
 		cp = ast_strdup(text + 2);
 		if (!cp) {
@@ -1728,7 +1733,11 @@ static int el_text(struct ast_channel *chan, const char *text)
 		}
 		i = finddelim(cp, strs, ARRAY_LEN(strs));
 		if (i) {
-			struct ast_str *pkt = ast_str_create(EL_INIT_BUFFER);
+			new_linkstr = ast_str_create(EL_INIT_BUFFER);
+			if (!new_linkstr) {
+				ast_free(cp);
+				return -1;
+			}
 
 			if (i > 1) {
 				qsort(strs, i, sizeof(char *), mycompar);
@@ -1742,22 +1751,22 @@ static int el_text(struct ast_channel *chan, const char *text)
 
 				/* Process AllStar node numbers - skip over those that begin with '3' which are echolink */
 				if (*node != '3') {
-					if ((ast_str_strlen(pkt) - k + strlen(node)) >= 36) {
+					if ((ast_str_strlen(new_linkstr) - k + strlen(node)) >= 36) {
 						/* the current line in the buffer is getting long, start fresh */
-						ast_str_append(&pkt, 0, "\r    ");
-						k = ast_str_strlen(pkt) - 4;
+						ast_str_append(&new_linkstr, 0, "\r    ");
+						k = ast_str_strlen(new_linkstr) - 4;
 					}
 					if (!j) {
-						ast_str_append(&pkt, 0, "AllStar:");
+						ast_str_append(&new_linkstr, 0, "AllStar:");
 						j = 1;
 					}
-					ast_str_append(&pkt, 0, " %s%s", node, mode == 'T' ? "" : "(M)");
+					ast_str_append(&new_linkstr, 0, " %s%s", node, mode == 'T' ? "" : "(M)");
 				}
 			}
-			ast_str_append(&pkt, 0, "\r");
+			ast_str_append(&new_linkstr, 0, "\r");
 
 			j = 0;					 /* if header added */
-			k = ast_str_strlen(pkt); /* start of current line in buffer */
+			k = ast_str_strlen(new_linkstr); /* start of current line in buffer */
 			for (x = 0; x < i; x++) {
 				char mode = *strs[x];
 				char *node = strs[x] + 1;
@@ -1766,28 +1775,32 @@ static int el_text(struct ast_channel *chan, const char *text)
 				/* Process echolink node numbers - they start with 3 */
 				if (*node == '3') {
 					node++; /* advance to the EL node# */
-					if ((ast_str_strlen(pkt) - k + strlen(node)) >= 36) {
+					if ((ast_str_strlen(new_linkstr) - k + strlen(node)) >= 36) {
 						/* the current line in the buffer is getting long, start fresh */
-						ast_str_append(&pkt, 0, "\r    ");
-						k = ast_str_strlen(pkt) - 4;
+						ast_str_append(&new_linkstr, 0, "\r    ");
+						k = ast_str_strlen(new_linkstr) - 4;
 					}
 					if (!j) {
-						ast_str_append(&pkt, 0, "Echolink:");
+						ast_str_append(&new_linkstr, 0, "Echolink:");
 						j = 1;
 					}
 					lookup_node_by_nodenum(node, &node_result);
 					if (node_result.callsign[0]) {
-						ast_str_append(&pkt, 0, " %s%s", node_result.callsign, mode == 'T' ? "" : "(M)");
+						ast_str_append(&new_linkstr, 0, " %s%s", node_result.callsign, mode == 'T' ? "" : "(M)");
 					} else {
-						ast_str_append(&pkt, 0, " %d%s", atoi(node), mode == 'T' ? "" : "(M)");
+						ast_str_append(&new_linkstr, 0, " %d%s", atoi(node), mode == 'T' ? "" : "(M)");
 					}
 				}
 			}
-			ast_str_append(&pkt, 0, "\r");
-
-			p->linkstr = pkt;
+			ast_str_append(&new_linkstr, 0, "\r");
 		}
 		ast_free(cp);
+		ast_mutex_lock(&p->lock);
+		old_linkstr = p->linkstr;
+		p->linkstr = new_linkstr;
+		ast_mutex_unlock(&p->lock);
+		ast_free(old_linkstr);
+
 		ast_mutex_lock(&el_nodelist_lock);
 		twalk(el_node_list, send_info);
 		ast_mutex_unlock(&el_nodelist_lock);
@@ -2013,7 +2026,7 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 		const struct el_node *node = *(struct el_node **) nodep;
 		struct el_pvt *p = node->pvt;
 
-		if (!p) {
+		if (!node->ready || !p) {
 			return;
 		}
 
@@ -2047,9 +2060,8 @@ static void process_unkey_timers(const void *nodep, const VISIT which, void *clo
 			p->rxkey = 0;
 		}
 
-		ao2_ref(p, -1);
-
 		ast_mutex_unlock(&p->lock);
+		ao2_ref(p, -1);
 	}
 }
 
@@ -2104,8 +2116,14 @@ static void send_info(const void *nodep, const VISIT which, const int depth)
 			ast_str_append(&pkt, 0, "%s\n\n", instp->mymessage);
 		}
 
-		if (node->pvt && node->pvt->linkstr) {
-			ast_str_append(&pkt, 0, "Systems Linked:\r%s", ast_str_buffer(node->pvt->linkstr));
+		if (node->ready && node->pvt) {
+			struct el_pvt *p = node->pvt;
+
+			ast_mutex_lock(&p->lock);
+			if (p->linkstr) {
+				ast_str_append(&pkt, 0, "Systems Linked:\r%s", ast_str_buffer(p->linkstr));
+			}
+			ast_mutex_unlock(&p->lock);
 		}
 
 		sendto(instp->audio_sock, ast_str_buffer(pkt), ast_str_strlen(pkt), 0, (struct sockaddr *) &sin, sizeof(sin));
@@ -2191,6 +2209,10 @@ static void send_text_one(struct el_node *node, const char *message)
 {
 	struct sockaddr_in sin;
 	char text[1024];
+	int audio_sock;
+
+	ast_mutex_lock(&el_nodelist_lock);
+	audio_sock = node->instp->audio_sock;
 
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
@@ -2199,16 +2221,25 @@ static void send_text_one(struct el_node *node, const char *message)
 
 	snprintf(text, sizeof(text), "oNDATA%s>%s\r\n", node->instp->mycall, message);
 
-	sendto(node->instp->audio_sock, text, strlen(text), 0, (struct sockaddr *) &sin, sizeof(sin));
-
 	node->instp->tx_audio_packets++;
 	node->tx_audio_packets++;
+	ast_mutex_unlock(&el_nodelist_lock);
+
+	sendto(audio_sock, text, strlen(text), 0, (struct sockaddr *) &sin, sizeof(sin));
 }
 
 /*!
- * \brief Free node.  Empty routine.
+ * \brief Release a node and its private structure.
  */
-static void free_node(void *nodep) {}
+static void free_node(void *nodep)
+{
+	struct el_node *node = nodep;
+
+	if (node->pvt) {
+		ao2_ref(node->pvt, -1);
+	}
+	ao2_ref(node, -1);
+}
 
 /*!
  * \brief Find and delete a node from our internal node list.
@@ -2223,38 +2254,54 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 	struct el_node **found_key;
 
 	ast_mutex_lock(&el_nodelist_lock);
-
 	found_key = (struct el_node **) tfind(key, &el_node_list, compare_ip);
 	if (found_key) {
 		struct el_node *node = *found_key;
 		struct el_pvt *p = node->pvt;
 
+		ao2_ref(node, +1);
+		tdelete(node, &el_node_list, compare_ip);
+		ast_mutex_unlock(&el_nodelist_lock);
 		if (instp) {
+			ast_mutex_lock(&instp->lock);
 			if (instp->current_talker == node) {
 				ast_debug(3, "Current talker %s is disconnecting, clearing current talker.\n", node->call);
-				instp->current_talker->istimedout = 0;
-				instp->current_talker->isdoubling = 0;
 				instp->current_talker = NULL;
 				instp->current_talker_start_time = (struct timeval) { 0 };
 				instp->current_talker_last_time = (struct timeval) { 0 };
+				ast_mutex_unlock(&instp->lock);
+
+				ast_mutex_lock(&el_nodelist_lock);
+				node->istimedout = 0;
+				node->isdoubling = 0;
+				ast_mutex_unlock(&el_nodelist_lock);
+				ao2_ref(node, -1); /* release the reference owned by current_talker */
+			} else {
+				ast_mutex_unlock(&instp->lock);
 			}
 		}
 
 		ast_debug(3, "Removing from current node list Callsign %s, IP Address %s.\n", node->call, node->ip);
 		found = 1;
+		if (p) {
+			struct ast_channel *owner = NULL;
 
-		ast_mutex_lock(&p->lock);
-		if (p->owner) {
-			ast_softhangup(p->owner, AST_SOFTHANGUP_DEV);
+			ast_mutex_lock(&p->lock);
+			if (p->owner) {
+				owner = ast_channel_ref(p->owner);
+			}
+			ast_mutex_unlock(&p->lock);
+			if (owner) {
+				ast_softhangup(owner, AST_SOFTHANGUP_DEV);
+				ast_channel_unref(owner);
+			}
+			ao2_ref(p, -1);
 		}
-		ast_mutex_unlock(&p->lock);
-
-		tdelete(node, &el_node_list, compare_ip);
-		ao2_ref(p, -1);
-		ast_free(node);
+		ao2_ref(node, -2); /* one for internal +1 and one to free */
+	} else {
+		ast_mutex_unlock(&el_nodelist_lock);
 	}
 
-	ast_mutex_unlock(&el_nodelist_lock);
 	return found;
 }
 
@@ -2561,12 +2608,12 @@ static int el_xwrite(struct ast_channel *chan, struct ast_frame *frame)
 
 /*!
  * \brief Start a new Echolink call.
- * \param p				Pointer to echolink private.
+ * \param p			Pointer to echolink private; its reference is consumed by this function.
  * \param state			State.
  * \param nodenum		Node number to call.
  * \param assignedids	Pointer to unique ID string assigned to the channel.
  * \param requestor		Pointer to Asterisk channel.
- * \return 				Asterisk channel.
+ * \return 				Caller-owned Asterisk channel reference, which the caller must release or transfer.
  */
 static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int nodenum, const struct ast_assigned_ids *assignedids,
 	const struct ast_channel *requestor)
@@ -2574,9 +2621,17 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 	struct ast_channel *chan;
 	int rate;
 
+	p->timer = ast_timer_open();
+	if (!p->timer) {
+		ast_log(LOG_ERROR, "Channel %s: Unable to create timer.\n", p->stream);
+		ao2_ref(p, -1);
+		return NULL;
+	}
+
 	chan = ast_channel_alloc(1, state, 0, 0, "", p->instp->astnode, p->instp->context, assignedids, requestor, 0, "echolink/%s", p->stream);
 	if (!chan) {
 		ast_log(LOG_WARNING, "Unable to allocate channel structure.\n");
+		ao2_ref(p, -1);
 		return NULL;
 	}
 
@@ -2586,13 +2641,6 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 	ast_channel_set_rawwriteformat(chan, ast_format_gsm);
 	ast_channel_set_writeformat(chan, ast_format_gsm);
 	ast_channel_set_readformat(chan, ast_format_gsm);
-
-	p->timer = ast_timer_open();
-	if (!p->timer) {
-		ast_log(LOG_ERROR, "Channel %s: Unable to create timer.\n", p->stream);
-		ast_hangup(chan);
-		return NULL;
-	}
 
 	rate = 1000 / ast_format_get_default_ms(ast_format_gsm);
 	ast_timer_set_rate(p->timer, rate);
@@ -2621,9 +2669,14 @@ static struct ast_channel *el_new(struct el_pvt *p, int state, unsigned int node
 	}
 
 	if (state != AST_STATE_DOWN) {
+		/* Preserve a caller-owned reference before the PBX thread takes ownership of the allocation reference */
+		ast_channel_ref(chan);
 		if (ast_pbx_start(chan)) {
 			ast_log(LOG_WARNING, "Unable to start PBX on %s.\n", ast_channel_name(chan));
+			p->owner = NULL;
 			ast_hangup(chan);
+			ast_channel_unref(chan);
+			return NULL;
 		}
 	}
 
@@ -2673,11 +2726,13 @@ static struct ast_channel *el_request(const char *type, struct ast_format_cap *c
 	}
 
 	p = el_alloc(str);
-	if (p) {
-		chan = el_new(p, AST_STATE_DOWN, nodenum, assignedids, requestor);
-		if (!chan) {
-			ao2_ref(p, -1);
-		}
+	if (!p) {
+		return NULL;
+	}
+
+	chan = el_new(p, AST_STATE_DOWN, nodenum, assignedids, requestor);
+	if (!chan) {
+		return NULL;
 	}
 
 	return chan;
@@ -3588,13 +3643,14 @@ static void *el_register(void *data)
 static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *call, const char *name, struct el_node *node_lookup)
 {
 	struct el_node *el_node_key;
-	struct ast_channel *chan = NULL;
+	struct el_node **found_node;
+	struct ast_channel *chan;
 	const struct eldb *mynode;
 	char nodestr[30];
-	char callsign[ELDB_CALLSIGNLEN];
+	char lastcall[EL_CALL_SIZE];
 	time_t now;
 
-	el_node_key = ast_calloc(1, sizeof(struct el_node));
+	el_node_key = ao2_alloc(sizeof(struct el_node), NULL);
 	if (!el_node_key) {
 		return -1;
 	}
@@ -3608,95 +3664,103 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 	mynode = el_db_find_ipaddr(el_node_key->ip);
 	if (!mynode) {
 		ast_log(LOG_ERROR, "Cannot find database entry for IP address %s, Callsign %s.\n", el_node_key->ip, call);
-		ast_free(el_node_key);
+		ao2_ref(el_node_key, -1);
 		ast_mutex_unlock(&el_db_lock);
 		return 1;
 	}
 
 	ast_copy_string(nodestr, mynode->nodenum, sizeof(nodestr));
-	ast_copy_string(callsign, mynode->callsign, sizeof(callsign));
+	ast_copy_string(lastcall, mynode->callsign, sizeof(lastcall));
 	el_node_key->nodenum = atoi(nodestr);
 	el_node_key->heartbeat_countdown = instp->rtcptimeout;
 	el_node_key->seqnum = 1;
 	el_node_key->instp = instp;
+	/* Keep a setup reference; the original reference becomes the tree's on successful insertion. */
+	ao2_ref(el_node_key, 1);
+
+	ast_mutex_unlock(&el_db_lock);
 
 	ast_mutex_lock(&el_nodelist_lock);
-
-	if (tsearch(el_node_key, &el_node_list, compare_ip)) {
+	found_node = tsearch(el_node_key, &el_node_list, compare_ip);
+	if (found_node && (*found_node == el_node_key)) {
+		/* Successfully inserted new node. */
 		ast_debug(1, "New Call - Callsign %s, IP Address %s, Node %i, Name %s.\n", el_node_key->call, el_node_key->ip,
 			el_node_key->nodenum, el_node_key->name);
 
 		if (p == NULL) {
 			/* A new inbound call */
-			p = el_alloc(instp->name);
-			if (!p) {
-				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
-				find_delete(el_node_key, instp);
-				ast_mutex_unlock(&el_nodelist_lock);
-				ast_mutex_unlock(&el_db_lock);
-				return -1;
-			}
-
-			ast_copy_string(p->ip, node_lookup->ip, EL_IP_SIZE);
-
-			chan = el_new(p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
-			if (!chan) {
-				ao2_ref(p, -1);
-				find_delete(el_node_key, instp);
-				ast_mutex_unlock(&el_nodelist_lock);
-				ast_mutex_unlock(&el_db_lock);
-				return -1;
-			}
-
-			/* el_new() gave the alloc ref to the PBX. Hold one until the answer is queued. */
-			ast_channel_ref(chan);
-
-			el_node_key->rx_ctrl_packets++;
-
-			ao2_ref(p, 1);
-			el_node_key->pvt = p;
-		} else {
-			/* A new outbound call*/
-			ao2_ref(p, 1);
-			el_node_key->pvt = p; /* Assign the passed in reference for an outbound call */
-			ast_copy_string(el_node_key->pvt->ip, node_lookup->ip, EL_IP_SIZE);
-			el_node_key->outbound = 1;
-			el_node_key->rx_ctrl_packets++;
-		}
-
-		ast_mutex_unlock(&el_nodelist_lock);
-		ast_mutex_unlock(&el_db_lock);
-
-		/* ast_queue_frame() locks the channel. Do that after el_nodelist_lock (#1309). */
-		if (chan) {
 			struct ast_frame fr = {
 				.frametype = AST_FRAME_CONTROL,
 				.subclass.integer = AST_CONTROL_ANSWER,
 				.src = __PRETTY_FUNCTION__,
 			};
 
+			p = el_alloc(instp->name);
+			if (!p) {
+				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
+				ast_mutex_unlock(&el_nodelist_lock);
+				find_delete(el_node_key, instp);
+				ao2_ref(el_node_key, -1);
+				return -1;
+			}
+
+			ao2_ref(p, 1);
+			ast_copy_string(p->ip, node_lookup->ip, EL_IP_SIZE);
+			el_node_key->rx_ctrl_packets++;
+			el_node_key->pvt = p; /* Associate p while the node remains unavailable to packet processing. */
+
+			ast_mutex_unlock(&el_nodelist_lock);
+			chan = el_new(p, AST_STATE_RINGING, el_node_key->nodenum, NULL, NULL);
+			if (!chan) {
+				find_delete(el_node_key, instp);
+				ao2_ref(el_node_key, -1);
+				return -1;
+			}
+
+			ast_mutex_lock(&el_nodelist_lock);
+			found_node = tfind(el_node_key, &el_node_list, compare_ip);
+			if (!found_node || (*found_node != el_node_key)) {
+				ast_mutex_unlock(&el_nodelist_lock);
+				ast_softhangup(chan, AST_SOFTHANGUP_DEV);
+				ast_channel_unref(chan);
+				ao2_ref(el_node_key, -1);
+				return -1;
+			}
+			el_node_key->ready = 1;
+			ast_mutex_unlock(&el_nodelist_lock);
+
 			ast_queue_frame(chan, &fr);
 			ast_channel_unref(chan);
+
+		} else {
+			/* A new outbound call*/
+			ao2_ref(p, 1);
+			el_node_key->pvt = p; /* The outbound channel private data is already initialized. */
+			ast_copy_string(el_node_key->pvt->ip, node_lookup->ip, EL_IP_SIZE);
+			el_node_key->outbound = 1;
+			el_node_key->rx_ctrl_packets++;
+			el_node_key->ready = 1;
+			ast_mutex_unlock(&el_nodelist_lock);
 		}
 
 		ast_mutex_lock(&instp->lock);
 		time(&now);
 		if (p != NULL) {
-			ast_copy_string(instp->lastcall, callsign, sizeof(instp->lastcall));
+			ast_copy_string(instp->lastcall, lastcall, sizeof(instp->lastcall));
 		}
 		if (instp->starttime < (now - EL_APRS_START_DELAY)) {
 			instp->aprstime = now;
 		}
 		ast_mutex_unlock(&instp->lock);
 
+		ao2_ref(el_node_key, -1); /* release the extra reference we held for setup */
 		return 0;
 	}
 
 	ast_log(LOG_ERROR, "Failed to add new call, Callsign %s, IP Address %s, Name %s.\n", el_node_key->call, el_node_key->ip,
 		el_node_key->name);
-	ast_free(el_node_key);
+	ao2_ref(el_node_key, -2);
 	ast_mutex_unlock(&el_nodelist_lock);
-	ast_mutex_unlock(&el_db_lock);
 	return -1;
 }
 
@@ -3762,6 +3826,7 @@ static void *el_reader(void *data)
 	struct timeval start_time;
 	int elap;
 	int heartbeat_timer;
+	int talker_elapsed;
 
 	time(&instp->starttime);
 	instp->aprstime = instp->starttime + EL_APRS_START_DELAY;
@@ -3978,60 +4043,68 @@ static void *el_reader(void *data)
 					if (call_name[0] != '\0') {
 						call = call_name;
 						nameptr = strchr(call_name, ' ');
-						name = "UNKNOWN";
-
 						if (nameptr) {
 							*nameptr = '\0';
 							name = nameptr + 1;
 							name = ast_strip(name);
+						} else {
+							name = "UNKNOWN";
 						}
 
-						ast_mutex_lock(&el_nodelist_lock);
 						ast_copy_string(node_lookup.ip, ast_inet_ntoa(sin.sin_addr), EL_IP_SIZE);
 
+						ast_mutex_lock(&el_nodelist_lock);
 						found_key = (struct el_node **) tfind(&node_lookup, &el_node_list, compare_ip);
-						if (found_key) {
+						if (found_key && (*found_key)->ready) {
 							struct el_node *node = *found_key;
 							struct el_pvt *p = node->pvt;
-							struct ast_channel *chan = NULL;
 
-							if (!p->firstheard) {
-								ast_mutex_lock(&p->lock);
-								if (p->owner) {
-									chan = ast_channel_ref(p->owner);
-								}
-
-								p->firstheard = 1;
-								ast_mutex_unlock(&p->lock);
-
-								ast_debug(3, "Channel %s: answer\n", p->stream);
-							}
-
-							node->heartbeat_countdown = instp->rtcptimeout;
-							/* different callsigns behind a NAT router, running -L, -R, ... */
-							if (strncmp((*found_key)->call, call, EL_CALL_SIZE - 1) != 0) {
-								ast_verb(4, "Call changed from %s to %s.\n", node->call, call);
-								ast_copy_string(node->call, call, EL_CALL_SIZE);
-							}
-							if (strncmp(node->name, name, EL_NAME_SIZE - 1) != 0) {
-								ast_verb(4, "Name changed from %s to %s.\n", (*found_key)->name, name);
-								ast_copy_string(node->name, name, EL_NAME_SIZE);
-							}
-							node->rx_ctrl_packets++;
+							ao2_ref(node, +1);
+							ao2_ref(p, +1);
 							ast_mutex_unlock(&el_nodelist_lock);
 
-							/* ast_queue_frame() locks the channel. Do that after el_nodelist_lock (#1309). */
-							if (chan) {
+							ast_mutex_lock(&p->lock);
+							if (!p->firstheard) {
 								struct ast_frame fr = {
 									.frametype = AST_FRAME_CONTROL,
 									.subclass.integer = AST_CONTROL_ANSWER,
 									.src = __PRETTY_FUNCTION__,
 								};
+								struct ast_channel *chan = NULL;
 
-								ast_queue_frame(chan, &fr);
-								ast_channel_unref(chan);
+								if (p->owner) {
+									chan = ast_channel_ref(p->owner);
+								}
+								p->firstheard = 1;
+								ast_mutex_unlock(&p->lock);
+
+								if (chan) {
+									ast_queue_frame(chan, &fr);
+									ast_channel_unref(chan);
+								}
+								ast_debug(3, "Channel %s: answer\n", p->stream);
+							} else {
+								ast_mutex_unlock(&p->lock);
 							}
-						} else {   /* otherwise its a new request */
+
+							ast_mutex_lock(&el_nodelist_lock);
+							node->heartbeat_countdown = instp->rtcptimeout;
+							/* different callsigns behind a NAT router, running -L, -R, ... */
+							if (strncmp(node->call, call, EL_CALL_SIZE - 1) != 0) {
+								ast_verb(4, "Call changed from %s to %s.\n", node->call, call);
+								ast_copy_string(node->call, call, EL_CALL_SIZE);
+							}
+							if (strncmp(node->name, name, EL_NAME_SIZE - 1) != 0) {
+								ast_verb(4, "Name changed from %s to %s.\n", node->name, name);
+								ast_copy_string(node->name, name, EL_NAME_SIZE);
+							}
+							node->rx_ctrl_packets++;
+							ast_mutex_unlock(&el_nodelist_lock);
+
+							ao2_ref(node, -1);
+							ao2_ref(p, -1);
+						} else if (!found_key) {
+							/* it's a new request */
 							ast_mutex_unlock(&el_nodelist_lock);
 							i = 0; /* default authorized */
 							if (instp->ndenylist) {
@@ -4119,6 +4192,9 @@ static void *el_reader(void *data)
 							ast_mutex_lock(&el_nodelist_lock);
 							twalk(el_node_list, send_info);
 							ast_mutex_unlock(&el_nodelist_lock);
+						} else {
+							/* a call for this IP is already being initialized */
+							ast_mutex_unlock(&el_nodelist_lock);
 						}
 					} else {
 						instp->rx_bad_packets++;
@@ -4153,105 +4229,132 @@ static void *el_reader(void *data)
 				if (buf[0] == 0x6f) {
 					process_cmd(buf, recvlen, node_lookup.ip, instp, &node_lookup);
 				} else {
-					ast_mutex_lock(&el_nodelist_lock);
-
+					ast_mutex_lock(&el_nodelist_lock); /* Lock the node for a lookup */
 					found_key = (struct el_node **) tfind(&node_lookup, &el_node_list, compare_ip);
-					if (found_key) {
+					if (found_key && (*found_key)->ready) {
 						struct el_node *node = *found_key;
 						struct el_pvt *p = node->pvt;
 						struct ast_channel *chan = NULL;
-						struct ast_frame answer_fr = {
-							.frametype = AST_FRAME_CONTROL,
-							.subclass.integer = AST_CONTROL_ANSWER,
-							.src = __PRETTY_FUNCTION__,
-						};
-						int answer = 0;
+						int clear_node_values = 0;
 
 						ao2_ref(p, +1);
+						ao2_ref(node, +1);					 /* Get a ref for the found node */
+						ast_mutex_unlock(&el_nodelist_lock); /* Lookup finished */
 
 						ast_mutex_lock(&p->lock);
 						if (p->owner) {
 							chan = ast_channel_ref(p->owner);
 						}
-						ast_mutex_unlock(&p->lock);
-
 						if (!p->firstheard && chan) {
+							struct ast_frame fr = {
+								.frametype = AST_FRAME_CONTROL,
+								.subclass.integer = AST_CONTROL_ANSWER,
+								.src = __PRETTY_FUNCTION__,
+							};
+
 							p->firstheard = 1;
+							ast_mutex_unlock(&p->lock);
+
 							ast_debug(3, "Channel %s: answer\n", p->stream);
-							answer = 1;
+							ast_queue_frame(chan, &fr);
+						} else {
+							ast_mutex_unlock(&p->lock);
 						}
 
+						ast_mutex_lock(&el_nodelist_lock);
 						node->heartbeat_countdown = instp->rtcptimeout;
 						node->rx_audio_packets++;
+
 						/* compute inter-arrival jitter */
 						time_difference = ast_tvdiff_ms(current_packet_time, node->last_packet_time);
-
 						if (time_difference < 2000) {
 							node->jitter = (time_difference + node->jitter) / 2;
 						}
 
 						node->last_packet_time = current_packet_time;
+						ast_mutex_unlock(&el_nodelist_lock);
 
 						/*
 						 * see if we have a new talker
 						 */
+						ast_mutex_lock(&instp->lock);
 						if (!instp->current_talker) {
+							ao2_ref(node, +1); /* current_talker owns a reference */
 							instp->current_talker = node;
 							instp->current_talker_start_time = current_packet_time;
-							node->istimedout = 0;
-							node->isdoubling = 0;
+							clear_node_values = 1;
 							ast_debug(3, "Station %s started talking.\n", node->call);
+							ast_mutex_unlock(&instp->lock);
 						} else {
 							/* see if this is a double - two stations talking at the same time */
 							if (node->nodenum != instp->current_talker->nodenum) {
-								if (!node->isdoubling) {
-									ast_debug(3, "Station %s is doubling with %s.\n", node->call, instp->current_talker->call);
-									send_text_one(node, "You are doubling.");
-								}
+								char call[EL_CALL_SIZE];
+								char node_call[EL_CALL_SIZE];
+								int isdoubling;
+
+								ast_copy_string(call, instp->current_talker->call, sizeof(call));
+								ast_mutex_unlock(&instp->lock);
+
+								ast_mutex_lock(&el_nodelist_lock);
+								isdoubling = node->isdoubling;
 								node->isdoubling = 1;
+								ast_copy_string(node_call, node->call, sizeof(node_call));
 								ast_mutex_unlock(&el_nodelist_lock);
 
+								if (!isdoubling) {
+									ast_debug(3, "Station %s is doubling with %s.\n", node_call, call);
+									send_text_one(node, "You are doubling.");
+								}
+
 								if (chan) {
-									if (answer) {
-										ast_queue_frame(chan, &answer_fr);
-									}
 									ast_channel_unref(chan);
 								}
 
 								ao2_ref(p, -1);
+								ao2_ref(node, -1);
 								ast_mutex_lock(&instp->lock);
 								continue;
 							}
+							ast_mutex_unlock(&instp->lock);
 						}
+
+						if (clear_node_values) {
+							/* Keeping away from nested locks, use clear_node_values */
+							ast_mutex_lock(&el_nodelist_lock);
+							node->istimedout = 0;
+							node->isdoubling = 0;
+							ast_mutex_unlock(&el_nodelist_lock);
+						}
+
+						ast_mutex_lock(&instp->lock);
 						instp->current_talker_last_time = current_packet_time;
+						talker_elapsed = ast_tvdiff_ms(current_packet_time, instp->current_talker_start_time);
+						ast_mutex_unlock(&instp->lock);
+
 						/* see if they have timed out */
-						if (ast_tvdiff_ms(current_packet_time, instp->current_talker_start_time) > instp->timeout_time) {
-							if (!node->istimedout) {
-								ast_debug(1, "Station %s timed out.\n", node->call);
-								send_text_one(node, "You have timed out.");
-							}
+						if (talker_elapsed > instp->timeout_time) {
+							char node_call[EL_CALL_SIZE];
+							int istimedout;
+
+							ast_mutex_lock(&el_nodelist_lock);
+							istimedout = node->istimedout;
 							node->istimedout = 1;
+							ast_copy_string(node_call, node->call, sizeof(node_call));
 							ast_mutex_unlock(&el_nodelist_lock);
 
+							if (!istimedout) {
+								ast_debug(1, "Station %s timed out.\n", node_call);
+								send_text_one(node, "You have timed out.");
+							}
+
 							if (chan) {
-								if (answer) {
-									ast_queue_frame(chan, &answer_fr);
-								}
 								ast_channel_unref(chan);
 							}
 
 							ao2_ref(p, -1);
+							ao2_ref(node, -1);
 							ast_mutex_lock(&instp->lock);
 							continue;
-						}
-
-						ast_mutex_unlock(&el_nodelist_lock);
-
-						/* ast_queue_frame() locks the channel. Do that after el_nodelist_lock (#1309). */
-						if (chan) {
-							if (answer) {
-								ast_queue_frame(chan, &answer_fr);
-							}
 						}
 
 						/* queue the gsm packets */
@@ -4283,27 +4386,50 @@ static void *el_reader(void *data)
 						}
 
 						ao2_ref(p, -1);
+						ao2_ref(node, -1);
 					} else {
+						ast_mutex_unlock(&el_nodelist_lock);
 						instp->rx_bad_packets++;
 					}
 				}
 			}
 		}
+
 		/* check current talker (see if they have stopped talking) */
 		ast_mutex_lock(&instp->lock);
 		if (instp->current_talker) {
+			struct el_node *node;
+
 			if (ast_tvdiff_ms(ast_tvnow(), instp->current_talker_last_time) > AUDIO_TIMEOUT) {
 				ast_debug(3, "Station %s stopped talking.\n", instp->current_talker->call);
-				instp->current_talker->istimedout = 0;
-				instp->current_talker->isdoubling = 0;
+				node = instp->current_talker;
 				instp->current_talker = NULL;
 				instp->current_talker_start_time = (struct timeval) { 0 };
 				instp->current_talker_last_time = (struct timeval) { 0 };
+				ast_mutex_unlock(&instp->lock);
+
+				ast_mutex_lock(&el_nodelist_lock);
+				node->istimedout = 0;
+				node->isdoubling = 0;
+				ast_mutex_unlock(&el_nodelist_lock);
+
+				ao2_ref(node, -1);
+				ast_mutex_lock(&instp->lock);
 			}
 		}
 	}
 
-	ast_mutex_unlock(&instp->lock);
+	if (instp->current_talker) {
+		struct el_node *node = instp->current_talker;
+
+		instp->current_talker = NULL;
+		instp->current_talker_start_time = (struct timeval) { 0 };
+		instp->current_talker_last_time = (struct timeval) { 0 };
+		ast_mutex_unlock(&instp->lock);
+		ao2_ref(node, -1); /* release the reference owned by current_talker */
+	} else {
+		ast_mutex_unlock(&instp->lock);
+	}
 	ast_debug(1, "Echolink read thread exited.\n");
 	return NULL;
 }
@@ -4658,6 +4784,7 @@ config_error:
 static int unload_module(void)
 {
 	int n;
+	void *node_list;
 
 	run_forever = 0;
 
@@ -4689,10 +4816,12 @@ static int unload_module(void)
 		}
 	}
 
-	if (el_node_list) {
-		ast_mutex_lock(&el_nodelist_lock);
-		tdestroy(el_node_list, free_node);
-		ast_mutex_unlock(&el_nodelist_lock);
+	ast_mutex_lock(&el_nodelist_lock);
+	node_list = el_node_list;
+	el_node_list = NULL;
+	ast_mutex_unlock(&el_nodelist_lock);
+	if (node_list) {
+		tdestroy(node_list, free_node);
 	}
 
 	if (el_db_callsign) {
