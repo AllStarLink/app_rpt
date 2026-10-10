@@ -4234,7 +4234,7 @@ static void *el_reader(void *data)
 								.frametype = AST_FRAME_CONTROL,
 								.subclass.integer = AST_CONTROL_ANSWER,
 								.src = __PRETTY_FUNCTION__,
-							};  
+							};
 
 							p->firstheard = 1;
 							ast_mutex_unlock(&p->lock);
