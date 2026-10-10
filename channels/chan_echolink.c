@@ -3679,12 +3679,6 @@ static int do_new_call(struct el_instance *instp, struct el_pvt *p, const char *
 
 		if (p == NULL) {
 			/* A new inbound call */
-			struct ast_frame fr = {
-				.frametype = AST_FRAME_CONTROL,
-				.subclass.integer = AST_CONTROL_ANSWER,
-				.src = __PRETTY_FUNCTION__,
-			};
-
 			p = el_alloc(instp->name);
 			if (!p) {
 				ast_log(LOG_ERROR, "Cannot alloc el channel %s.\n", instp->name);
@@ -4046,6 +4040,7 @@ static void *el_reader(void *data)
 						if (found_key && (*found_key)->ready) {
 							struct el_node *node = *found_key;
 							struct el_pvt *p = node->pvt;
+							struct ast_channel *chan = NULL;
 
 							ao2_ref(node, +1);
 							ao2_ref(p, +1);
@@ -4066,10 +4061,6 @@ static void *el_reader(void *data)
 								p->firstheard = 1;
 								ast_mutex_unlock(&p->lock);
 
-								if (chan) {
-									ast_queue_frame(chan, &fr);
-									ast_channel_unref(chan);
-								}
 								ast_debug(3, "Channel %s: answer\n", p->stream);
 							} else {
 								ast_mutex_unlock(&p->lock);
@@ -4230,12 +4221,6 @@ static void *el_reader(void *data)
 							chan = ast_channel_ref(p->owner);
 						}
 						if (!p->firstheard && chan) {
-							struct ast_frame fr = {
-								.frametype = AST_FRAME_CONTROL,
-								.subclass.integer = AST_CONTROL_ANSWER,
-								.src = __PRETTY_FUNCTION__,
-							};
-
 							p->firstheard = 1;
 							ast_mutex_unlock(&p->lock);
 
@@ -4290,6 +4275,9 @@ static void *el_reader(void *data)
 								}
 
 								if (chan) {
+									if (answer) {
+										ast_queue_frame(chan, &answer_fr);
+									}
 									ast_channel_unref(chan);
 								}
 
@@ -4331,6 +4319,9 @@ static void *el_reader(void *data)
 							}
 
 							if (chan) {
+								if (answer) {
+									ast_queue_frame(chan, &answer_fr);
+								}
 								ast_channel_unref(chan);
 							}
 

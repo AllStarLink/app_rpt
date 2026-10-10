@@ -3408,15 +3408,28 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 {
 	struct ast_frame *f;
+	struct ast_channel *chan;
 
 	rpt_mutex_lock(&myrpt->lock);
-	while (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
-		struct ast_channel *chan = ast_channel_ref(l->chan);
+	if (!l->chan || AST_LIST_EMPTY(&l->textq)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return;
+	}
+	chan = ast_channel_ref(l->chan);
+	while (chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
+		int rv;
+
 		f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_write(chan, f);
-		rpt_mutex_lock(&myrpt->lock);
+		rv = ast_write(chan, f);
 		ast_frfree(f);
+		rpt_mutex_lock(&myrpt->lock);
+		if (rv < 0) {
+			ast_debug(3, "ast_write failed on %s, breaking loop\n", ast_channel_name(chan));
+			break;
+		}
+	}
+	if (chan) {
 		ast_channel_unref(chan);
 	}
 	rpt_mutex_unlock(&myrpt->lock);
@@ -4717,6 +4730,14 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		return 0;
 	}
 	if (l->chan && (CHAN_TECH(l->chan, "echolink") || CHAN_TECH(l->chan, "tlb"))) {
+		/*
+		 * No AllStar redial. A local link-off already set RPT_LINK_DISCONNECT;
+		 * cleanup skips discpgm unless we finish here. Silent (ilink 6) and a
+		 * remote hangup still run discpgm in cleanup.
+		 */
+		if (l->disced == RPT_LINK_DISCONNECT) {
+			link_disconnect_finished(myrpt, l);
+		}
 		return 0;
 	}
 
@@ -5170,14 +5191,17 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		}
 		continue;
 	}
+
 	/* Link is done: Cleanup channels and link structure */
-	/*
-	 * Flush leftover textq (keys, keepalive, !!DISCONNECT!! queued via
-	 * rpt_link_queue_disconnect). remote_hangup_helper usually flushed already.
-	 */
+
 	if (l->chan) {
+		/*
+		 * Flush leftover textq (keys, keepalive, !!DISCONNECT!! queued via
+		 * rpt_link_queue_disconnect). remote_hangup_helper usually flushed already.
+		 */
 		link_process_textq(myrpt, l);
 	}
+
 	rpt_mutex_lock(&myrpt->lock);
 	ao2_ref(l, +1);					  /* prevent freeing while we finish up */
 	rpt_link_remove(myrpt->links, l); /* remove from queue */
@@ -5185,6 +5209,11 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 		myrpt->cmdnode[0] = 0;
 	}
 	rpt_mutex_unlock(&myrpt->lock);
+	/* hangup the pchan, removing it from the conference. */
+	if (l->pchan) {
+		ast_hangup(l->pchan);
+		l->pchan = NULL;
+	}
 
 	/*
 	 * REMDISC/CONNFAIL only after rpt_link_remove() (haslink guard). Skip telem for
@@ -5210,10 +5239,6 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 
 	/* Hang-up the channels */
 	hangup_link_chan(l);
-	if (l->pchan) {
-		ast_hangup(l->pchan);
-		l->pchan = NULL;
-	}
 
 	if (l->hasconnected) {
 		rpt_update_links(myrpt);
@@ -5228,6 +5253,16 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 
 	ast_mutex_destroy(&l->altaudio_lock);
+	ast_mutex_lock(&myrpt->lock);
+	if (!AST_LIST_EMPTY(&l->textq)) {
+		struct ast_frame *f;
+
+		/* Free any textq frames that may be left */
+		while ((f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list))) {
+			ast_frfree(f);
+		}
+	}
+	ast_mutex_unlock(&myrpt->lock);
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 	return;
 }
@@ -5263,9 +5298,15 @@ static inline int monchannel_read(struct rpt *myrpt)
 			/* IF we are an altlink() and the repeater is not receiving (aka we are in the tail time),
 			 * whisper the output audio onto said link.
 			 */
+			enum rpt_tele_mode mode;
+
 			if (!l->altaudio_enabled) {
 				continue;
 			}
+			ast_mutex_lock(&myrpt->lock);
+			mode = myrpt->active_telem ? myrpt->active_telem->mode : ZERO;
+			ast_mutex_unlock(&myrpt->lock);
+
 			ast_mutex_lock(&l->altaudio_lock);
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && (!myrpt->remrx) && (!myrpt->keyed) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
@@ -5277,7 +5318,10 @@ static inline int monchannel_read(struct rpt *myrpt)
 					ast_debug(1, "Flushing altlink audio backlog for node %s\n", l->name);
 					ast_slinfactory_flush(&l->altaudio);
 				}
-				ast_slinfactory_feed(&l->altaudio, f);
+				/* Don't repeat audio that is already in the CONF for an alt link */
+				if ((mode != PLAYBACK) && (mode != ID1) && (mode != STATS_GPS_LEGACY) && (mode != TEST_TONE)) {
+					ast_slinfactory_feed(&l->altaudio, f);
+				}
 			}
 			ast_mutex_unlock(&l->altaudio_lock);
 		}

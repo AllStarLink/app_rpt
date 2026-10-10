@@ -437,6 +437,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 	char peer[MAXPEERSTR];
 	struct rpt *myrpt;
 	struct ast_var_t *newvariable;
+	struct ast_channel *rxchannel = NULL;
 	char *connstate;
 	struct rpt_link *l;
 	int nrpts = rpt_num_rpts();
@@ -581,6 +582,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			 * Traverse the list of connected nodes
 			 */
 			n = __mklinklist(myrpt, NULL, &lbuf, USE_FORMAT_RPT_LINK) + 1;
+			if (myrpt->rxchannel) {
+				rxchannel = ast_channel_ref(myrpt->rxchannel);
+			}
 			rpt_mutex_unlock(&myrpt->lock);
 
 			now = rpt_tvnow();
@@ -622,6 +626,9 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 			strs = ast_malloc(n * sizeof(char *));
 			if (!strs) {
 				ast_free(lbuf);
+				if (rxchannel) {
+					ast_channel_unref(rxchannel);
+				}
 				return RESULT_FAILURE;
 			}
 
@@ -650,12 +657,15 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 
 			/* ### GET VARIABLES INFO #################### */
 			j = 0;
-			ast_channel_lock(rpt_vars[i].rxchannel);
-			AST_LIST_TRAVERSE(ast_channel_varshead(rpt_vars[i].rxchannel), newvariable, entries) {
-				j++;
-				ast_cli(fd, "%s=%s\n", ast_var_name(newvariable), ast_var_value(newvariable));
+			if (rxchannel) {
+				ast_channel_lock(rxchannel);
+				AST_LIST_TRAVERSE(ast_channel_varshead(rxchannel), newvariable, entries) {
+					j++;
+					ast_cli(fd, "%s=%s\n", ast_var_name(newvariable), ast_var_value(newvariable));
+				}
+				ast_channel_unlock(rxchannel);
+				ast_channel_unref(rxchannel);
 			}
-			ast_channel_unlock(rpt_vars[i].rxchannel);
 			ast_cli(fd, "\n");
 
 			/* ### OUTPUT RPT STATUS STATES ############## */
@@ -786,8 +796,16 @@ static int rpt_do_restart(int fd, int argc, const char *const *argv)
 
 	/* hanging up on the rx channel causes the rpt() thread to restart */
 	for (i = 0; i < nrpts; i++) {
-		if (rpt_vars[i].rxchannel) {
-			ast_softhangup(rpt_vars[i].rxchannel, AST_SOFTHANGUP_DEV);
+		struct ast_channel *rxchannel;
+		struct rpt *myrpt = &rpt_vars[i];
+
+		rpt_mutex_lock(&myrpt->lock);
+		rxchannel = myrpt->rxchannel ? ast_channel_ref(myrpt->rxchannel) : NULL;
+		rpt_mutex_unlock(&myrpt->lock);
+
+		if (rxchannel) {
+			ast_softhangup(rxchannel, AST_SOFTHANGUP_DEV);
+			ast_channel_unref(rxchannel);
 		}
 	}
 
@@ -956,9 +974,19 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 	for (i = 0; i < nrpts; i++) {
 		if (!strcmp(nodename, rpt_vars[i].name)) {
 			struct rpt *myrpt = &rpt_vars[i];
+			struct ast_channel *rxchannel;
 
-			if (!CHAN_TECH(myrpt->rxchannel, "voter") && !CHAN_TECH(myrpt->rxchannel, "simpleusb")) {
+			rpt_mutex_lock(&myrpt->lock);
+			rxchannel = myrpt->rxchannel ? ast_channel_ref(myrpt->rxchannel) : NULL;
+			rpt_mutex_unlock(&myrpt->lock);
+
+			if (!rxchannel) {
+				break;
+			}
+
+			if (!CHAN_TECH(rxchannel, "voter") && !CHAN_TECH(rxchannel, "simpleusb")) {
 				/* ignore channels that cannot accept the paging command */
+				ast_channel_unref(rxchannel);
 				return RESULT_SUCCESS;
 			}
 
@@ -974,7 +1002,8 @@ static int rpt_do_page(int fd, int argc, const char *const *argv)
 			}
 
 			gettimeofday(&myrpt->paging, NULL);
-			ast_sendtext(myrpt->rxchannel, str);
+			ast_sendtext(rxchannel, str);
+			ast_channel_unref(rxchannel);
 			break;
 		}
 	}
@@ -1163,9 +1192,22 @@ static int rpt_do_setvar(int fd, int argc, const char *const *argv)
 
 	for (x = 4; x < argc; x++) {
 		char *name = ast_strdupa(argv[x]);
+
 		if ((value = strchr(name, '='))) {
+			struct ast_channel *rxchannel;
+			struct rpt *myrpt = &rpt_vars[thisRpt];
+
 			*value++ = '\0';
-			pbx_builtin_setvar_helper(rpt_vars[thisRpt].rxchannel, name, value);
+			rpt_mutex_lock(&myrpt->lock);
+			rxchannel = myrpt->rxchannel ? ast_channel_ref(myrpt->rxchannel) : NULL;
+			rpt_mutex_unlock(&myrpt->lock);
+
+			if (rxchannel) {
+				pbx_builtin_setvar_helper(rxchannel, name, value);
+				ast_channel_unref(rxchannel);
+			} else {
+				ast_log(LOG_WARNING, "Ignoring entry '%s' with no rxchannel\n", name);
+			}
 		} else
 			ast_log(LOG_WARNING, "Ignoring entry '%s' with no = \n", name);
 	}
@@ -1236,6 +1278,7 @@ static int rpt_do_showvars(int fd, int argc, const char *const *argv)
 {
 	int i, thisRpt = -1;
 	struct ast_var_t *newvariable;
+	struct ast_channel *rxchannel = NULL;
 	int nrpts = rpt_num_rpts();
 
 	if (argc != 4) {
@@ -1254,16 +1297,27 @@ static int rpt_do_showvars(int fd, int argc, const char *const *argv)
 		return RESULT_FAILURE;
 	}
 
+	rpt_mutex_lock(&rpt_vars[thisRpt].lock);
+	if (rpt_vars[thisRpt].rxchannel) {
+		rxchannel = ast_channel_ref(rpt_vars[thisRpt].rxchannel);
+	}
+	rpt_mutex_unlock(&rpt_vars[thisRpt].lock);
+	if (!rxchannel) {
+		ast_cli(fd, "Node %s has no rx channel.\n", argv[3]);
+		return RESULT_FAILURE;
+	}
+
 	i = 0;
 	ast_cli(fd, "Variable listing for node %s:\n", argv[3]);
-	ast_channel_lock(rpt_vars[thisRpt].rxchannel);
+	ast_channel_lock(rxchannel);
 
-	AST_LIST_TRAVERSE(ast_channel_varshead(rpt_vars[thisRpt].rxchannel), newvariable, entries) {
+	AST_LIST_TRAVERSE(ast_channel_varshead(rxchannel), newvariable, entries) {
 		i++;
 		ast_cli(fd, "   %s=%s\n", ast_var_name(newvariable), ast_var_value(newvariable));
 	}
 
-	ast_channel_unlock(rpt_vars[thisRpt].rxchannel);
+	ast_channel_unlock(rxchannel);
+	ast_channel_unref(rxchannel);
 	ast_cli(fd, "    -- %d variables\n", i);
 	return 0;
 }
