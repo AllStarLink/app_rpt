@@ -5298,9 +5298,15 @@ static inline int monchannel_read(struct rpt *myrpt)
 			/* IF we are an altlink() and the repeater is not receiving (aka we are in the tail time),
 			 * whisper the output audio onto said link.
 			 */
+			enum rpt_tele_mode mode;
+
 			if (!l->altaudio_enabled) {
 				continue;
 			}
+			ast_mutex_lock(&myrpt->lock);
+			mode = myrpt->active_telem ? myrpt->active_telem->mode : ZERO;
+			ast_mutex_unlock(&myrpt->lock);
+
 			ast_mutex_lock(&l->altaudio_lock);
 			if (l->chan && altlink(myrpt, l) && (!l->lastrx) && (!myrpt->remrx) && (!myrpt->keyed) &&
 				((l->link_newkey != RADIO_KEY_NOT_ALLOWED) || l->lasttx || !CHAN_TECH(l->chan, "IAX2"))) {
@@ -5312,7 +5318,10 @@ static inline int monchannel_read(struct rpt *myrpt)
 					ast_debug(1, "Flushing altlink audio backlog for node %s\n", l->name);
 					ast_slinfactory_flush(&l->altaudio);
 				}
-				ast_slinfactory_feed(&l->altaudio, f);
+				/* Don't repeat audio that is already in the CONF for an alt link */
+				if ((mode != PLAYBACK) && (mode != ID1) && (mode != STATS_GPS_LEGACY) && (mode != TEST_TONE)) {
+					ast_slinfactory_feed(&l->altaudio, f);
+				}
 			}
 			ast_mutex_unlock(&l->altaudio_lock);
 		}
