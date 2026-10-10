@@ -459,7 +459,7 @@ struct el_instance {
 	uint32_t tx_ctrl_packets;
 	uint32_t rx_bad_packets;
 	int timeout_time;
-	struct el_node *current_talker;
+	struct el_node *current_talker; /* owns an AO2 reference while non-NULL; protected by the instance lock */
 	struct timeval current_talker_start_time;
 	struct timeval current_talker_last_time;
 	pthread_t el_reader_thread;
@@ -2275,6 +2275,7 @@ static int find_delete(const struct el_node *key, struct el_instance *instp)
 				node->istimedout = 0;
 				node->isdoubling = 0;
 				ast_mutex_unlock(&el_nodelist_lock);
+				ao2_ref(node, -1); /* release the reference owned by current_talker */
 			} else {
 				ast_mutex_unlock(&instp->lock);
 			}
@@ -4102,7 +4103,8 @@ static void *el_reader(void *data)
 
 							ao2_ref(node, -1);
 							ao2_ref(p, -1);
-						} else { /* otherwise its a new request */
+						} else if (!found_key) {
+							/* it's a new request */
 							ast_mutex_unlock(&el_nodelist_lock);
 							i = 0; /* default authorized */
 							if (instp->ndenylist) {
@@ -4190,6 +4192,9 @@ static void *el_reader(void *data)
 							ast_mutex_lock(&el_nodelist_lock);
 							twalk(el_node_list, send_info);
 							ast_mutex_unlock(&el_nodelist_lock);
+						} else {
+							/* a call for this IP is already being initialized */
+							ast_mutex_unlock(&el_nodelist_lock);
 						}
 					} else {
 						instp->rx_bad_packets++;
@@ -4274,6 +4279,7 @@ static void *el_reader(void *data)
 						 */
 						ast_mutex_lock(&instp->lock);
 						if (!instp->current_talker) {
+							ao2_ref(node, +1); /* current_talker owns a reference */
 							instp->current_talker = node;
 							instp->current_talker_start_time = current_packet_time;
 							clear_node_values = 1;
@@ -4396,7 +4402,6 @@ static void *el_reader(void *data)
 
 			if (ast_tvdiff_ms(ast_tvnow(), instp->current_talker_last_time) > AUDIO_TIMEOUT) {
 				ast_debug(3, "Station %s stopped talking.\n", instp->current_talker->call);
-				ao2_ref(instp->current_talker, +1);
 				node = instp->current_talker;
 				instp->current_talker = NULL;
 				instp->current_talker_start_time = (struct timeval) { 0 };
@@ -4414,7 +4419,17 @@ static void *el_reader(void *data)
 		}
 	}
 
-	ast_mutex_unlock(&instp->lock);
+	if (instp->current_talker) {
+		struct el_node *node = instp->current_talker;
+
+		instp->current_talker = NULL;
+		instp->current_talker_start_time = (struct timeval) { 0 };
+		instp->current_talker_last_time = (struct timeval) { 0 };
+		ast_mutex_unlock(&instp->lock);
+		ao2_ref(node, -1); /* release the reference owned by current_talker */
+	} else {
+		ast_mutex_unlock(&instp->lock);
+	}
 	ast_debug(1, "Echolink read thread exited.\n");
 	return NULL;
 }
