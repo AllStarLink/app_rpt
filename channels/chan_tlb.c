@@ -273,8 +273,10 @@ struct TLB_instance {
 	char astnode[TLB_NAME_SIZE + 1];
 	char context[TLB_NAME_SIZE + 1];
 	char *denylist[TLB_MAX_CALL_LIST];
+	char *denylist_buf;
 	int ndenylist;
 	char *permitlist[TLB_MAX_CALL_LIST];
+	char *permitlist_buf;
 	int npermitlist;
 	short rtcptimeout; /* missed 10 heartbeats, you're out */
 	char fdr_file[FILENAME_MAX];
@@ -862,7 +864,11 @@ static int TLB_call(struct ast_channel *ast, const char *dest, int timeout)
 	ast_mutex_lock(&instp->lock);
 	ast_copy_string(instp->TLB_node_test.ip, strs[1], sizeof(instp->TLB_node_test.ip));
 	instp->TLB_node_test.port = strtoul(strs[2], NULL, 0);
-	do_new_call(instp, p, "OUTBOUND", "OUTBOUND", strs[3]);
+	if (do_new_call(instp, p, "OUTBOUND", "OUTBOUND", strs[3])) {
+		ast_mutex_unlock(&instp->lock);
+		ast_free(str);
+		return -1;
+	}
 
 	pack_length = rtcp_make_sdes(pack, sizeof(pack), instp->mycall);
 
@@ -914,6 +920,7 @@ static void TLB_destroy(struct TLB_pvt *p)
 		ast_free(qptlb);
 	}
 	ast_module_user_remove(p->u);
+	ast_mutex_destroy(&p->lock);
 	ast_free(p);
 }
 
@@ -1380,9 +1387,12 @@ static void send_heartbeat(const void *nodep, const VISIT which, const int depth
 }
 
 /*!
- * \brief Free node.  Empty routine.
+ * \brief Free a TLB_node key previously inserted with tsearch.
  */
-static void free_node(void *nodep) {}
+static void free_node(void *nodep)
+{
+	ast_free(nodep);
+}
 
 /*!
  * \brief Find and delete a node from our internal node list.
@@ -2013,7 +2023,7 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 	struct ast_flags zeroflag = { 0 };
 	struct ast_variable *v;
 	char *sval, *strs[10], mycodec[20];
-	int i, n;
+	int i = 0, n;
 
 	mycodec[0] = 0;
 	if (codec) {
@@ -2070,6 +2080,18 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 	TLB_node_key->countdown = instp->rtcptimeout;
 	TLB_node_key->seqnum = 1;
 	TLB_node_key->instp = instp;
+	if (mycodec[0]) {
+		for (i = 0; tlb_codecs[i].name; i++) {
+			if (!strcasecmp(mycodec, tlb_codecs[i].name)) {
+				break;
+			}
+		}
+		if (!tlb_codecs[i].name) {
+			ast_log(LOG_ERROR, "Unknown codec type %s for call %s\n", mycodec, TLB_node_key->call);
+			ast_free(TLB_node_key);
+			return -1;
+		}
+	}
 	ast_mutex_lock(&instp->lock);
 	if (tsearch(TLB_node_key, &TLB_node_list, compare_ip)) {
 		ast_debug(1, "tlb: new CALL = %s, ip = %s, port = %u\n", TLB_node_key->call, TLB_node_key->ip, TLB_node_key->port & 0xffff);
@@ -2112,18 +2134,6 @@ static int do_new_call(struct TLB_instance *instp, struct TLB_pvt *p, const char
 		return -1;
 	}
 	if (mycodec[0]) {
-		for (i = 0; tlb_codecs[i].name; i++) {
-			if (!strcasecmp(mycodec, tlb_codecs[i].name)) {
-				break;
-			}
-		}
-		if (!tlb_codecs[i].name) {
-			ast_log(LOG_ERROR, "Unknown codec type %s for call %s\n", mycodec, TLB_node_key->call);
-			ast_free(TLB_node_key);
-			ast_free(p);
-			ast_mutex_unlock(&instp->lock);
-			return -1;
-		}
 		p->txcodec = i;
 	}
 	ast_mutex_unlock(&instp->lock);
@@ -2380,7 +2390,6 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	const char *val;
 	struct TLB_instance *instp;
 	struct sockaddr_in si_me;
-	pthread_attr_t attr;
 
 	if (ninstances >= TLB_MAX_INSTANCES) {
 		ast_log(LOG_ERROR, "Too many instances specified\n");
@@ -2396,6 +2405,7 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	instp->audio_sock = -1;
 	instp->ctrl_sock = -1;
 	instp->fdr = -1;
+	instp->TLB_reader_thread = AST_PTHREADT_NULL;
 
 	val = ast_variable_retrieve(cfg, ctg, "ipaddr");
 	if (val) {
@@ -2450,11 +2460,26 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	val = ast_variable_retrieve(cfg, ctg, "deny");
 	if (val) {
-		instp->ndenylist = finddelim(ast_strdup(val), instp->denylist, ARRAY_LEN(instp->denylist));
+		instp->denylist_buf = ast_strdup(val);
+		if (!instp->denylist_buf) {
+			ast_log(LOG_ERROR, "Cannot allocate deny list for %s\n", ctg);
+			ast_mutex_destroy(&instp->lock);
+			ast_free(instp);
+			return -1;
+		}
+		instp->ndenylist = finddelim(instp->denylist_buf, instp->denylist, ARRAY_LEN(instp->denylist));
 	}
 	val = ast_variable_retrieve(cfg, ctg, "permit");
 	if (val) {
-		instp->npermitlist = finddelim(ast_strdup(val), instp->permitlist, ARRAY_LEN(instp->permitlist));
+		instp->permitlist_buf = ast_strdup(val);
+		if (!instp->permitlist_buf) {
+			ast_log(LOG_ERROR, "Cannot allocate permit list for %s\n", ctg);
+			ast_mutex_destroy(&instp->lock);
+			ast_free(instp->denylist_buf);
+			ast_free(instp);
+			return -1;
+		}
+		instp->npermitlist = finddelim(instp->permitlist_buf, instp->permitlist, ARRAY_LEN(instp->permitlist));
 	}
 	instp->pref_rxcodec = PREF_RXCODEC;
 	instp->pref_txcodec = PREF_TXCODEC;
@@ -2475,12 +2500,16 @@ static int store_config(struct ast_config *cfg, char *ctg)
 
 	if ((instp->audio_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
 		ast_log(LOG_WARNING, "Unable to create new socket for TheLinkBox audio connection\n");
+		ast_free(instp->denylist_buf);
+		ast_free(instp->permitlist_buf);
 		return -1;
 	}
 	if ((instp->ctrl_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
 		ast_log(LOG_WARNING, "Unable to create new socket for TheLinkBox control connection\n");
 		close(instp->audio_sock);
 		instp->audio_sock = -1;
+		ast_free(instp->denylist_buf);
+		ast_free(instp->permitlist_buf);
 		return -1;
 	}
 	memset((char *) &si_me, 0, sizeof(si_me));
@@ -2498,6 +2527,8 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		instp->ctrl_sock = -1;
 		close(instp->audio_sock);
 		instp->audio_sock = -1;
+		ast_free(instp->denylist_buf);
+		ast_free(instp->permitlist_buf);
 		return -1;
 	}
 	instp->ctrl_port = instp->audio_port + 1;
@@ -2508,14 +2539,26 @@ static int store_config(struct ast_config *cfg, char *ctg)
 		instp->ctrl_sock = -1;
 		close(instp->audio_sock);
 		instp->audio_sock = -1;
+		ast_free(instp->denylist_buf);
+		ast_free(instp->permitlist_buf);
 		return -1;
 	}
 	fcntl(instp->audio_sock, F_SETFL, O_NONBLOCK);
 	fcntl(instp->ctrl_sock, F_SETFL, O_NONBLOCK);
 	ast_copy_string(instp->name, ctg, TLB_NAME_SIZE);
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	ast_pthread_create(&instp->TLB_reader_thread, &attr, TLB_reader, (void *) instp);
+	/* Joinable so unload can wait for the reader to leave before freeing instance state. */
+	if (ast_pthread_create(&instp->TLB_reader_thread, NULL, TLB_reader, instp)) {
+		ast_log(LOG_ERROR, "Unable to start TheLinkBox reader thread for %s\n", ctg);
+		close(instp->ctrl_sock);
+		instp->ctrl_sock = -1;
+		close(instp->audio_sock);
+		instp->audio_sock = -1;
+		ast_mutex_destroy(&instp->lock);
+		ast_free(instp->denylist_buf);
+		ast_free(instp->permitlist_buf);
+		ast_free(instp);
+		return -1;
+	}
 	instances[ninstances++] = instp;
 
 	ast_debug(1, "tlb: tlb/%s listening on %s port %s\n", instp->name, instp->ipaddr, instp->port);
@@ -2528,7 +2571,6 @@ static int unload_module(void)
 	int n;
 
 	run_forever = 0;
-	tdestroy(TLB_node_list, free_node);
 	for (n = 0; n < ninstances; n++) {
 		if (instances[n]->audio_sock != -1) {
 			close(instances[n]->audio_sock);
@@ -2543,6 +2585,17 @@ static int unload_module(void)
 	/* First, take us out of the channel loop */
 	ast_channel_unregister(&TLB_tech);
 	for (n = 0; n < ninstances; n++) {
+		if (instances[n]->TLB_reader_thread != AST_PTHREADT_NULL) {
+			pthread_join(instances[n]->TLB_reader_thread, NULL);
+			instances[n]->TLB_reader_thread = AST_PTHREADT_NULL;
+		}
+	}
+	tdestroy(TLB_node_list, free_node);
+	TLB_node_list = NULL;
+	for (n = 0; n < ninstances; n++) {
+		ast_mutex_destroy(&instances[n]->lock);
+		ast_free(instances[n]->denylist_buf);
+		ast_free(instances[n]->permitlist_buf);
 		ast_free(instances[n]);
 	}
 
