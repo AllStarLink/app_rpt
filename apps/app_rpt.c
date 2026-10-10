@@ -3408,15 +3408,28 @@ static inline void rxunkey_helper(struct rpt *myrpt, struct rpt_link *l)
 static inline void link_process_textq(struct rpt *myrpt, struct rpt_link *l)
 {
 	struct ast_frame *f;
+	struct ast_channel *chan;
 
 	rpt_mutex_lock(&myrpt->lock);
-	while (l->chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
-		struct ast_channel *chan = ast_channel_ref(l->chan);
+	if (!l->chan || AST_LIST_EMPTY(&l->textq)) {
+		rpt_mutex_unlock(&myrpt->lock);
+		return;
+	}
+	chan = ast_channel_ref(l->chan);
+	while (chan && l->thisconnected && !AST_LIST_EMPTY(&l->textq)) {
+		int rv;
+
 		f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list);
 		rpt_mutex_unlock(&myrpt->lock);
-		ast_write(chan, f);
-		rpt_mutex_lock(&myrpt->lock);
+		rv = ast_write(chan, f);
 		ast_frfree(f);
+		rpt_mutex_lock(&myrpt->lock);
+		if (rv < 0) {
+			ast_debug(3, "ast_write failed on %s, breaking loop\n", ast_channel_name(chan));
+			break;
+		}
+	}
+	if (chan) {
 		ast_channel_unref(chan);
 	}
 	rpt_mutex_unlock(&myrpt->lock);
@@ -5228,6 +5241,16 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	}
 
 	ast_mutex_destroy(&l->altaudio_lock);
+	ast_mutex_lock(&myrpt->lock);
+	if (!AST_LIST_EMPTY(&l->textq)) {
+		struct ast_frame *f;
+
+		/* Free any textq frames that may be left */
+		while ((f = AST_LIST_REMOVE_HEAD(&l->textq, frame_list))) {
+			ast_frfree(f);
+		}
+	}
+	ast_mutex_unlock(&myrpt->lock);
 	ao2_ref(l, -1); /* and drop the extra ref we're holding */
 	return;
 }
