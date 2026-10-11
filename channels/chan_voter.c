@@ -5135,14 +5135,20 @@ static void *voter_timer(void *data)
 		/* Add a tick to the voter_timing_count every time we pass though. */
 		voter_timing_count++;
 
-		/* Cycle through our Asterisk channels, checking the status of our clients,
-		 * to make sure they are still sending data to us. Disconnect them if we
-		 * haven't heard from them after the timeout period. Additionally, if we lost
-		 * our master timing client, force a disconnect of all remaining clients that
-		 * were connected to that instance (they can't do anything if there is no master).
+		/* Client timeout and endpoint-sanity checks depend on the global client
+		 * list, not on an individual Asterisk channel. Run them once per tick.
+		 * Previously these checks were nested inside a loop, so each tick repeated
+		 * the full timeout and sanity scan on every client once per channel. That
+		 * needlessly extended the time voter_lock was held and could delay voter_reader().
+		 * Keep the checks under voter_lock because they inspect and reset shared client
+		 * state. We preserve the existing behavior of skipping these checks when no channel
+		 * instances are loaded.
+		 *
+		 * Additionally, if we lost our master timing client, force a disconnect of all
+		 * remaining clients, since we no longer have a timing reference.
 		 */
-		for (p = pvts; p; p = p->next) {
-			/* Cycle through each client configured for this channel. */
+		if (pvts) {
+			/* Scan the global client list once, independently of the channel count. */
 			for (client = clients; client; client = client->next) {
 				/* Check and see if any of our clients timed out (haven't been heard from).
 				 *
@@ -5206,7 +5212,11 @@ static void *voter_timer(void *data)
 						 * and we don't want to do that without the other necessary cleanup above.
 						 */
 						voter_client_reset_connection(client);
-						break;
+						/* Continue scanning the remaining clients during this tick (don't exit with a break).
+						 * Otherwise, an ordinary timeout ahead of the active master would terminate the scan
+						 * and defer master-timeout handling.
+						 */
+						continue;
 					}
 				}
 			}
