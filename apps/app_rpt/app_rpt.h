@@ -1,6 +1,6 @@
 #define VERSION_MAJOR 3
 #define VERSION_MINOR 10
-#define VERSION_PATCH 7
+#define VERSION_PATCH 8
 
 #include "asterisk/audiohook.h"
 #include "asterisk/slinfactory.h"
