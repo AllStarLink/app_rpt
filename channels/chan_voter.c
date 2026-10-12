@@ -5167,7 +5167,7 @@ static void *voter_timer(void *data)
 			 *
 			 * The very first thing we need to do is service the timeout checks, so that they
 			 * don't get delayed due to other processing here, in voter_reader() or voter_xmit(),
-			 * which can lead to false client (espeically master client) timeouts.
+			 * which can lead to false client (especially master client) timeouts.
 			 *
 			 * We start by grabbing a timestamp of NOW to use as our reference for all these checks.
 			 */
@@ -5225,7 +5225,7 @@ static void *voter_timer(void *data)
 				}
 			} else {
 				/* Master is healthy (or absent). Check normal client timeouts. The normal client timeout is much
-				 * more relaxed than the current master client tiemout. We can safely use lastheardtime for those
+				 * more relaxed than the current master client timeout. We can safely use lastheardtime for those
 				 * checks, as well as the timeout_now timestamp we grabbed above when we started this process without
 				 * fear of races and stale data.
 				 *
