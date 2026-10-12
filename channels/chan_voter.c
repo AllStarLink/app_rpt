@@ -3642,6 +3642,15 @@ static void *voter_xmit(void *data)
 						/* Copy the digest of the current client, so we can use it later. */
 						tx_client_digest = client->respdigest;
 						tx_client_send = 1;
+						/* Without mixminus, the packet is already prepared and no post-unlock translation can
+						 * fail. Update lastsenttime now under this lock, avoiding a second lock and client-list
+						 * scan. Keep the deferred update below for mixminus, where translation failure must not
+						 * suppress a keepalive. This is an optimization for normal configs, so we don't take a
+						 * second lock and traverse the client list un-necessarily for non-mixminus configurations.
+						 */
+						if (!tx_client_mix) {
+							client->lastsenttime = ast_radio_tvnow();
+						}
 						/* We have a client we need to send audio to, so break out of
 						 * the current loop, so we can send the audio packet while unlocked.
 						 */
@@ -3680,22 +3689,22 @@ static void *voter_xmit(void *data)
 					ast_frfree(txf1);
 					txf1 = NULL;
 				}
-				/* Translation succeeded and the packet is ready to send.
-				 * Update lastsenttime under voter_lock so failed translation
-				 * attempts do not suppress keepalives.
-				 *
-				 * We use the client digest we copied earlier (tx_client_digest) to
-				 * find the right client to update.
+				/* For mixminus, update lastsenttime only after translation succeeds, so a failed translation
+				 * does not suppress keepalives. Non-mixminus clients get updated above during client selection
+				 * while voter_lock was held. This removed a second lock and client list traversal for every
+				 * client, when in most cases, we can just update lastsenttime during the first lock (optimization).
 				 */
-				ast_mutex_lock(&voter_lock);
-				for (client = clients; client; client = client->next) {
-					if ((client->nodenum == p->nodenum) && (client->respdigest == tx_client_digest) &&
-						(client->sin.sin_addr.s_addr == txsin.sin_addr.s_addr) && (client->sin.sin_port == txsin.sin_port)) {
-						client->lastsenttime = ast_radio_tvnow();
-						break;
+				if (tx_client_mix) {
+					ast_mutex_lock(&voter_lock);
+					for (client = clients; client; client = client->next) {
+						if ((client->nodenum == p->nodenum) && (client->respdigest == tx_client_digest) &&
+							(client->sin.sin_addr.s_addr == txsin.sin_addr.s_addr) && (client->sin.sin_port == txsin.sin_port)) {
+							client->lastsenttime = ast_radio_tvnow();
+							break;
+						}
 					}
+					ast_mutex_unlock(&voter_lock);
 				}
-				ast_mutex_unlock(&voter_lock);
 				/* FINALLY, send the ulaw audio packet outside voter_lock. */
 				sendto(udp_socket, &audiopacket, sizeof(audiopacket) - 3, 0, (struct sockaddr *) &txsin, sizeof(txsin));
 			}
