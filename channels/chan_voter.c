@@ -5089,11 +5089,15 @@ static void *voter_timer(void *data)
 	struct voter_pvt *p;
 	struct voter_client *client, *client1;
 	struct timeval mix_time;
-	int client_timed_out;
 	char client_ip[INET_ADDRSTRLEN];
 	char client1_ip[INET_ADDRSTRLEN];
 
 	while (run_forever && !ast_shutting_down()) {
+		/* Track client connections (timeouts) and endpoint sanity. */
+		struct timeval timeout_now;
+		int client_timed_out, master_timed_out, run_sanity;
+		static unsigned int sanity_tick = 0;
+
 		/* Check and acknowledge our thread timer. This timer keeps our audio in sync (for IAX2). */
 		int timer_fd = ast_timer_fd(voter_thread_timer);
 		int timeout_ms = -1; /* block until the timer fires */
@@ -5157,79 +5161,101 @@ static void *voter_timer(void *data)
 		 * remaining clients, since we no longer have a timing reference.
 		 */
 		if (pvts) {
-			/* Scan the global client list once, independently of the channel count. */
+			/* Check the active master before ordinary clients, so ordinary-client
+			 * cleanup cannot delay the master watchdog decision. Use one timestamp
+			 * for all timeout comparisons in this pass.
+			 *
+			 * The very first thing we need to do is service the timeout checks, so that they
+			 * don't get delayed due to other processing here, in voter_reader() or voter_xmit(),
+			 * which can lead to false client (espeically master client) timeouts.
+			 *
+			 * We start by grabbing a timestamp of NOW to use as our reference for all these checks.
+			 */
+			timeout_now = ast_radio_tvnow();
+			master_timed_out = 0;
+			/* Traverse the client list. If this is a voting configuration, we need to find the currently
+			 * active master client first, and check it.
+			 */
 			for (client = clients; client; client = client->next) {
-				/* Check and see if any of our clients timed out (haven't been heard from).
-				 *
-				 * For the current master client (client->curmaster), take our master_rx_lock
-				 * first, so that no other threads can modify the time while we evaluate it
-				 * (ie voter_reader).
-				 *
-				 * We test the current master client first, because if it timed out, we don't need
-				 * the else if... we just proceed to the next block, which is going to dump
-				 * all the clients anyways.
-				 *
-				 * If this isn't the current master client, we just do a normal test against
-				 * the normal client threshold (CLIENT_TIMEOUT_MS), and dump the client, if
-				 * required.
-				 */
-				client_timed_out = 0;
-				if (client->ismaster && client->curmaster) {
-					/* Read and evaluate the master receive timestamp while holding its lock,
-					 * immediately before making the timeout decision. */
-					ast_mutex_lock(&master_rx_lock);
-					if (!ast_tvzero(master_rx_time)) {
-						client_timed_out = voter_tvdiff_ms(ast_radio_tvnow(), master_rx_time) > MASTER_TIMEOUT_MS;
-					}
-					ast_mutex_unlock(&master_rx_lock);
-				} else if (!ast_tvzero(client->lastheardtime)) {
-					client_timed_out = voter_tvdiff_ms(ast_radio_tvnow(), client->lastheardtime) > CLIENT_TIMEOUT_MS;
+				/* Keep skipping until we locate the current active master (there will only be one). */
+				if (!(client->ismaster && client->curmaster)) {
+					continue;
 				}
-
-				if (client_timed_out) {
-					ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (timeout)\n", client->nodenum, client->name);
-
-					/* If this was the current master that disconnected, we need to gracefully drop any other
-					 * clients that were connected to the server, since we no longer have a master timing source.
+				/* Read the active master's receive timestamp under its dedicated lock. master_rx_time is
+				 * set in voter_reader() when a packet arrives from that client. Read it under lock, so that
+				 * it can't be mutated by the other thread.
+				 */
+				ast_mutex_lock(&master_rx_lock);
+				if (!ast_tvzero(master_rx_time)) {
+					/* Get a timestamp NOW under lock and compare to our master_rx_time timestamp and
+					 * see if the master has timed out. We have to grab a new NOW timestamp here specifically
+					 * for testing the master client, because if master_rx_time got updated by voter_reader()
+					 * even a few microseconds after we grabbed timeout_now, voter_tvdiff_ms() will return a
+					 * negative value, and cause the master client to timeout. We're avoiding a race.
+					 *
+					 * If the current master client is still good, master_timed_out will continue to be false.
 					 */
+					master_timed_out = voter_tvdiff_ms(ast_radio_tvnow(), master_rx_time) > MASTER_TIMEOUT_MS;
+				}
+				ast_mutex_unlock(&master_rx_lock);
+				break; /* There should be only one active master, so when we're done, we're done. */
+			}
+
+			/* Now we can check all the clients to see if they've timed out. First, if we have a master client,
+			 * and it timed out, process that. We kick the current master client, then dump all the other clients.
+			 *
+			 * If we don't have a master client (ie everything is mix-mode and doesn't need one), or the master client
+			 * is healthy, we run the else branch to check all other clients.
+			 */
+			if (master_timed_out) {
+				ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (timeout)\n", client->nodenum, client->name);
+				ast_log(LOG_WARNING, "Lost master timing client, disconnecting remaining clients.\n");
+				ast_log(LOG_NOTICE, "VOTER %u: Master changed from client %s to NONE\n", client->nodenum, client->name);
+				/* Reset the master, then force re-authentication of connected non-master clients. */
+				voter_client_reset_connection(client);
+				/* Traverse the client list and dump the connections for all other connected clients. Ignore
+				 * any that have a master flag set (there can be more in a redundant configuration).
+				 */
+				for (client1 = clients; client1; client1 = client1->next) {
+					/* Preserve other configured master candidates for existing failover behavior. */
+					if (client1->heardfrom && !client1->ismaster) {
+						ast_log(LOG_WARNING, "Forcing disconnect of client: %s\n", client1->name);
+						voter_client_reset_connection(client1);
+					}
+				}
+			} else {
+				/* Master is healthy (or absent). Check normal client timeouts. The normal client timeout is much
+				 * more relaxed than the current master client tiemout. We can safely use lastheardtime for those
+				 * checks, as well as the timeout_now timestamp we grabbed above when we started this process without
+				 * fear of races and stale data.
+				 *
+				 * We iterate on the whole client list, so that one timeout doesn't hide another.
+				 */
+				for (client = clients; client; client = client->next) {
+					/* Ignore the current master client, if we find it, it is processed separately above. */
 					if (client->ismaster && client->curmaster) {
-						ast_log(LOG_WARNING, "Lost master timing client, disconnecting remaining clients.\n");
-						/* Reset the current active master flag for this client, since it disconnected (this
-						 * will be taken care of in voter_client_reset_connection).
-						 */
-						ast_log(LOG_NOTICE, "VOTER %u: Master changed from client %s to NONE\n", client->nodenum, client->name);
-						/* Dump the master client, forcing re-authentication. */
-						voter_client_reset_connection(client);
-						/* Traverse the client list to look for other clients. */
-						for (client1 = clients; client1; client1 = client1->next) {
-							/* Only drop connections for clients we have heard from (not all configured clients
-							 * in voter.conf), EXCEPT if the client has an ismaster flag (that lets us gracefully
-							 * switch master clients, if multiple are defined (they need to be on the same network
-							 * though)).
-							 */
-							if (client1->heardfrom && !client1->ismaster) {
-								ast_log(LOG_WARNING, "Forcing disconnect of client: %s\n", client1->name);
-								/* Dump the remaining clients, forcing re-authentication. */
-								voter_client_reset_connection(client1);
-							}
-						}
-						break;
-					} else {
-						/* If this was just a regular client that timed out, clean up the connection. We
-						 * clean up "normal" clients after cleaning up any master clients, since the
-						 * voter_client_reset_connection function will also reset the masterconnected flag,
-						 * and we don't want to do that without the other necessary cleanup above.
-						 */
-						voter_client_reset_connection(client);
-						/* Continue scanning the remaining clients during this tick (don't exit with a break).
-						 * Otherwise, an ordinary timeout ahead of the active master would terminate the scan
-						 * and defer master-timeout handling.
-						 */
 						continue;
+					}
+					client_timed_out = !ast_tvzero(client->lastheardtime) &&
+									   (voter_tvdiff_ms(timeout_now, client->lastheardtime) > CLIENT_TIMEOUT_MS);
+					/* If the client has timed out, dump the connection. */
+					if (client_timed_out) {
+						ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (timeout)\n", client->nodenum, client->name);
+						voter_client_reset_connection(client);
 					}
 				}
 			}
-			if (check_client_sanity) {
+			/* Reduce the number of times we run the sanity check on client endpoints from every tick (every 20ms) to
+			 * once every second by counting ticks. Since VOTER_TICKS is usually set to 50, this gives us the one
+			 * second boundary to test to. Set the run_sanity flag when we get there, and reset the tick counter for
+			 * the next round.
+			 */
+			run_sanity = (++sanity_tick >= VOTER_TICKS);
+			if (run_sanity) {
+				sanity_tick = 0;
+			}
+			/* Endpoint sanity is a maintenance audit, not a 20 ms watchdog task. */
+			if (check_client_sanity && run_sanity) {
 				/* Traverse the client list. */
 				for (client = clients; client; client = client->next) {
 					/* If the client isn't authenticated, skip. */
