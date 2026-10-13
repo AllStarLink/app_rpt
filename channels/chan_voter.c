@@ -5331,10 +5331,14 @@ static void *voter_reader(void *data)
 		/* The watchdog cannot run until voter_lock is released. A master
 		 * packet arrived before this critical section, so restart its
 		 * silence interval now. A cycle with no master packet leaves it.
+		 * A reset or master change clears or replaces the digest; do not
+		 * stamp over that.
 		 */
 		if (refresh_master_rx) {
 			ast_mutex_lock(&master_rx_lock);
-			master_rx_time = ast_radio_tvnow();
+			if (master_rx_digest && master_rx_digest == htonl(vph->digest)) {
+				master_rx_time = ast_radio_tvnow();
+			}
 			ast_mutex_unlock(&master_rx_lock);
 			refresh_master_rx = 0;
 		}
