@@ -5285,6 +5285,7 @@ static void *voter_reader(void *data)
 	struct sockaddr_in sin;
 	struct voter_pvt *p;
 	int fd, i, j, timeout_ms, maxrssi, master_port, no_ast_channel = 0, logged_no_ast_channel = 0, logged_buflen_too_small = 0;
+	int refresh_master_rx = 0;
 	struct ast_frame *f1, fr;
 	socklen_t fromlen;
 	ssize_t recvlen = 0;
@@ -5326,6 +5327,17 @@ static void *voter_reader(void *data)
 		 * connect to.
 		 */
 		struct timeval packet_rx_time, previous_master_rx_time;
+
+		/* The watchdog cannot run until voter_lock is released. A master
+		 * packet arrived before this critical section, so restart its
+		 * silence interval now. A cycle with no master packet leaves it.
+		 */
+		if (refresh_master_rx) {
+			ast_mutex_lock(&master_rx_lock);
+			master_rx_time = ast_radio_tvnow();
+			ast_mutex_unlock(&master_rx_lock);
+			refresh_master_rx = 0;
+		}
 
 		ast_mutex_unlock(&voter_lock);
 
@@ -5378,6 +5390,7 @@ static void *voter_reader(void *data)
 						previous_master_rx_time = master_rx_time;
 						master_rx_time = packet_rx_time;
 						master_rx_updated = 1;
+						refresh_master_rx = 1;
 					}
 					ast_mutex_unlock(&master_rx_lock);
 				}
@@ -5568,6 +5581,7 @@ static void *voter_reader(void *data)
 			ast_mutex_lock(&master_rx_lock);
 			master_rx_time = previous_master_rx_time;
 			ast_mutex_unlock(&master_rx_lock);
+			refresh_master_rx = 0;
 		}
 
 		/* After we send the initial packet (above) to the client, it should respond with something
@@ -5810,6 +5824,7 @@ static void *voter_reader(void *data)
 			} else {
 				master_rx_digest = 0;
 				master_rx_time = ast_tv(0, 0);
+				refresh_master_rx = 0;
 			}
 			ast_mutex_unlock(&master_rx_lock);
 
