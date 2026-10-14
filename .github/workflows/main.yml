@@ -16,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     container: 
       image: ghcr.io/allstarlink/asl3-ci:latest
+    defaults:
+      run:
+        working-directory: /
     steps:
       - name: Checkout
         uses: actions/checkout@v6
