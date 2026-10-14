@@ -21,14 +21,16 @@ jobs:
         uses: actions/checkout@v6
       - name: Build app_rpt
         run: |
+          set -eu
+
           if [ -d /app_rpt ]; then
             # set aside the app_rpt sources used in the CI build
             mv /app_rpt /app_rpt-CI
           fi
           # use the version of app_rpt from the PR
-          mv ../app_rpt /app_rpt
+          cp -a "$GITHUB_WORKSPACE"/app_rpt /app_rpt
           cd /
-          ./asl3-asterisk/build-asl3 -t source build install
+          /asl3-asterisk/build-asl3 -t source build install
 
       - name: Run tests
         run: |
