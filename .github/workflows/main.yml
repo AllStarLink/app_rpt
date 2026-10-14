@@ -22,7 +22,11 @@ jobs:
       - name: Build app_rpt
         run: |
           set -eu
-
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          pwd
+          ls -la /
+          ls -la "$GITHUB_WORKSPACE"
+          find /__w -type f -name build-asl3 -print 2>/dev/null
           if [ -d /app_rpt ]; then
             # set aside the app_rpt sources used in the CI build
             mv /app_rpt /app_rpt-CI
