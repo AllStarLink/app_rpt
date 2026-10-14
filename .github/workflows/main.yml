@@ -16,18 +16,34 @@ jobs:
     runs-on: ubuntu-latest
     container: 
       image: ghcr.io/allstarlink/asl3-ci:latest
+    defaults:
+      run:
+        working-directory: /
     steps:
       - name: Checkout
         uses: actions/checkout@v6
       - name: Build app_rpt
         run: |
-          cp -r ../app_rpt /usr/src
-          cd /usr/src/app_rpt
-          ./rpt_install.sh
+          set -eu
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          pwd
+          ls -la /
+          ls -la "$GITHUB_WORKSPACE"
+          find /__w -type f -name build-asl3 -print 2>/dev/null
+          if [ -d /app_rpt ]; then
+            # set aside the app_rpt sources used in the CI build
+            mv /app_rpt /app_rpt-CI
+          fi
+          # use the version of app_rpt from the PR
+          cp -a "$GITHUB_WORKSPACE" /app_rpt
+          cd /
+          /asl3-asterisk/build-asl3 -t source build install
+
       - name: Run tests
         run: |
           cd /usr/src/testsuite
-          phreaknet runtest apps/rpt
+          ./runtests.py -t tests/apps/rpt
+
 #  archlinux:
 #    runs-on: ubuntu-24.04
 #    name: Arch Linux
