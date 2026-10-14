@@ -21,13 +21,14 @@ jobs:
         uses: actions/checkout@v6
       - name: Build app_rpt
         run: |
-          cp -r ../app_rpt /usr/src
-          cd /usr/src/app_rpt
-          ./rpt_install.sh
+          cp -r ../app_rpt /
+          cd /
+          ./asl3-asterisk/build-asl3 -t source build install
       - name: Run tests
         run: |
           cd /usr/src/testsuite
-          phreaknet runtest apps/rpt
+          runtests -t tests/apps/rpt
+
 #  archlinux:
 #    runs-on: ubuntu-24.04
 #    name: Arch Linux
