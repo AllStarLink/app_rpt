@@ -29,8 +29,8 @@ jobs:
           mv ../app_rpt /app_rpt
           cd /
           ./asl3-asterisk/build-asl3 -t source build install
-          - name: Run tests
 
+      - name: Run tests
         run: |
           cd /usr/src/testsuite
           ./runtests.py -t tests/apps/rpt
