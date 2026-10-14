@@ -236,7 +236,7 @@ enum keypost {
 	RPT_KEYPOST_NONE,
 	RPT_KEYPOST_ACTIVE
 };
-
+x
 enum {
 	REM_OFF,
 	REM_MONITOR,
