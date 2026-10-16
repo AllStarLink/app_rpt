@@ -4816,6 +4816,14 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 
 	if (l->retrytimer) {
 		hangup_link_chan(myrpt, l);
+		/* An ANSWER inside the retry window set elaptime to -1, which stops
+		 * periodic_process_link() before it can redial or tear down the link. */
+		rpt_mutex_lock(&myrpt->lock);
+		l->elaptime = 0;
+		l->connecttime = ast_tv(0, 0); /* no longer connected */
+		l->lastkeytime = 0;
+		l->thisconnected = 0;
+		rpt_mutex_unlock(&myrpt->lock);
 		return 1;
 	}
 	if (l->hasconnected && (l->max_retries == MAX_RETRIES_PERM || l->retries < l->max_retries)) {
