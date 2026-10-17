@@ -2145,57 +2145,15 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps)
 
 PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop)
 {
-	int64_t start;
 	PaError err;
 
 	if (!ps || !ps->stream || !buf) {
 		return paBadStreamPtr;
 	}
 
-	start = pa_now_ms();
-	while (!stop || !(*stop)) {
-		long avail;
-		int64_t elapsed_ms, remaining_ms;
-		unsigned long missing, estimated_us, sleep_us;
+	err = Pa_ReadStream(ps->stream, buf, frames);
+	return err;
 
-		/*
-		 * Pa_GetStreamReadAvailable() uses snd_pcm_avail_update(), which reports the
-		 * hardware position as of the last period interrupt. PortAudio's ALSA
-		 * GetStreamTime() calls snd_pcm_status() on the capture PCM, which makes the
-		 * kernel refresh that position, so the count below is current to the USB
-		 * packet instead of up to a period old. Without it the sleep estimate
-		 * overshoots and the reads drift late until capture overruns.
-		 */
-		Pa_GetStreamTime(ps->stream);
-		avail = Pa_GetStreamReadAvailable(ps->stream);
-
-		if (avail < 0) {
-			return (PaError) avail;
-		}
-
-		/* Read ready audio before the timeout check so a block that lands during the last sleep is not dropped. */
-		if ((unsigned long) avail >= frames) {
-			err = Pa_ReadStream(ps->stream, buf, frames);
-			return err;
-		}
-
-		elapsed_ms = pa_now_ms() - start;
-		if (elapsed_ms >= timeout_ms) {
-			return paTimedOut;
-		}
-
-		missing = frames - (unsigned long) avail;
-		remaining_ms = timeout_ms - elapsed_ms;
-
-		/* Time for the missing frames at 48 kHz, rounded up. */
-		estimated_us = (missing * 1000000UL + AST_RADIO_PA_SAMPLE_RATE - 1) / AST_RADIO_PA_SAMPLE_RATE;
-
-		/* Margin covers the 1 ms USB packet granularity; never sleep past the timeout. */
-		sleep_us = MIN(estimated_us + 1000, remaining_ms * 1000UL);
-		usleep((useconds_t) sleep_us);
-	}
-
-	return paTimedOut;
 }
 
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long pa_frames)
