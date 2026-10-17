@@ -1139,6 +1139,36 @@ static int usbradio_start_audio(struct chan_usbradio_pvt *o)
 }
 
 /*!
+ * \brief Flush the outbound TX frame queue.
+ */
+static void flush_tx_queue(struct chan_usbradio_pvt *o)
+{
+	struct ast_frame *f;
+
+	ast_mutex_lock(&o->txqlock);
+	while ((f = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
+		ast_frfree(f);
+	}
+	o->txq_depth = 0;
+	o->txq_high_water = 0;
+	ast_mutex_unlock(&o->txqlock);
+}
+
+/*!
+ * \brief Stop PortAudio and flush the TX queue.
+ */
+static void stream_cleanup(struct chan_usbradio_pvt *o)
+{
+	ast_radio_pa_stop(&o->pa);
+	usbradio_swap_audio_stopped(o);
+	o->audio_thread_ready = 0;
+	flush_tx_queue(o);
+	if (o->pmrChan) {
+		dedrift_reset(o->pmrChan);
+	}
+}
+
+/*!
  * \brief USB sound device GPIO processing thread
  * This thread uses the USB radio device assigned by res_usbradio and performs
  * setup and initialization of its HID interface.
@@ -1423,6 +1453,7 @@ static void *hidthread(void *arg)
 				if ((audio_time_now - o->lastaudiotime) > 3) {
 					usbradio_log_fault(o, 0, "Channel %s: Audio process has died or is not responding.\n", o->name);
 					o->hasusb = 0;
+					stream_cleanup(o);
 					break;
 				}
 			}
@@ -2132,36 +2163,6 @@ static struct ast_frame *usbradio_read(struct ast_channel *c)
 	(void) c;
 	ast_debug(1, "Read function should not be called!\n");
 	return &ast_null_frame;
-}
-
-/*!
- * \brief Flush the outbound TX frame queue.
- */
-static void flush_tx_queue(struct chan_usbradio_pvt *o)
-{
-	struct ast_frame *f;
-
-	ast_mutex_lock(&o->txqlock);
-	while ((f = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
-		ast_frfree(f);
-	}
-	o->txq_depth = 0;
-	o->txq_high_water = 0;
-	ast_mutex_unlock(&o->txqlock);
-}
-
-/*!
- * \brief Stop PortAudio and flush the TX queue.
- */
-static void stream_cleanup(struct chan_usbradio_pvt *o)
-{
-	ast_radio_pa_stop(&o->pa);
-	usbradio_swap_audio_stopped(o);
-	o->audio_thread_ready = 0;
-	flush_tx_queue(o);
-	if (o->pmrChan) {
-		dedrift_reset(o->pmrChan);
-	}
 }
 
 /*!

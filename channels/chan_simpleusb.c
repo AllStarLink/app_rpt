@@ -1081,6 +1081,33 @@ static int init_audio_device(struct chan_simpleusb_pvt *o)
 }
 
 /*!
+ * \brief 		Flush the audio stream buffer.
+ * \param o		Private structure for the channel.
+ */
+static void flush_stream_buffer(struct chan_simpleusb_pvt *o)
+{
+	struct ast_frame *f;
+
+	ast_mutex_lock(&o->txqlock);
+	while ((f = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
+		ast_frfree(f);
+	}
+	ast_mutex_unlock(&o->txqlock);
+}
+
+/*!
+ * \brief		Cleanup the audio stream. Stop audio stream and flush the audio stream buffer.
+ * \param o		Private structure for the channel.
+ */
+static void stream_cleanup(struct chan_simpleusb_pvt *o)
+{
+	ast_radio_pa_stop(&o->pa);
+	simpleusb_swap_audio_stopped(o);
+	o->audio_thread_ready = 0;
+	flush_stream_buffer(o);
+}
+
+/*!
  * \brief USB sound device GPIO processing thread
  * This thread uses the USB radio device assigned by res_usbradio and performs
  * setup and initialization of its HID interface.
@@ -1270,6 +1297,7 @@ static void *hidthread(void *arg)
 				if ((audio_time_now - o->lastaudiotime) > 1) {
 					simpleusb_log_fault(o, 0, "Channel %s: Audio process has died or is not responding.\n", o->name);
 					o->hasusb = 0;
+					stream_cleanup(o);
 					break;
 				}
 			}
@@ -2075,33 +2103,6 @@ static struct ast_frame *simpleusb_read(struct ast_channel *c)
 	/* This should never be called... */
 	ast_debug(1, "Read function should not be called!");
 	return &ast_null_frame;
-}
-
-/*!
- * \brief 		Flush the audio stream buffer.
- * \param o		Private structure for the channel.
- */
-static void flush_stream_buffer(struct chan_simpleusb_pvt *o)
-{
-	struct ast_frame *f;
-
-	ast_mutex_lock(&o->txqlock);
-	while ((f = AST_LIST_REMOVE_HEAD(&o->txq, frame_list))) {
-		ast_frfree(f);
-	}
-	ast_mutex_unlock(&o->txqlock);
-}
-
-/*!
- * \brief		Cleanup the audio stream. Stop audio stream and flush the audio stream buffer.
- * \param o		Private structure for the channel.
- */
-static void stream_cleanup(struct chan_simpleusb_pvt *o)
-{
-	ast_radio_pa_stop(&o->pa);
-	simpleusb_swap_audio_stopped(o);
-	o->audio_thread_ready = 0;
-	flush_stream_buffer(o);
 }
 
 /*!
