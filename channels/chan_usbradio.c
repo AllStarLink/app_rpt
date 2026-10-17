@@ -5270,6 +5270,69 @@ static int xpmr_config(struct chan_usbradio_pvt *o)
 	return 0;
 }
 
+/* Copy src into dst, then give dst its own name, gpio, and pps strings. */
+static int usbradio_pvt_copy(struct chan_usbradio_pvt *dst, const struct chan_usbradio_pvt *src, const char *name)
+{
+	int i;
+	char *copy;
+
+	*dst = *src;
+	dst->next = NULL;
+	dst->name = ast_strdup(name);
+	if (!dst->name) {
+		return -1;
+	}
+	dst->pttkick[0] = -1;
+	dst->pttkick[1] = -1;
+	dst->audiothread = AST_PTHREADT_NULL;
+	dst->hidthread = AST_PTHREADT_NULL;
+	dst->radio_device = NULL;
+	dst->owner = NULL;
+	dst->dsp = NULL;
+	dst->pmrChan = NULL;
+
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (!dst->gpios[i]) {
+			continue;
+		}
+		copy = ast_strdup(dst->gpios[i]);
+		if (!copy) {
+			dst->gpios[i] = NULL;
+			goto fail;
+		}
+		dst->gpios[i] = copy;
+	}
+	for (i = 0; i < ARRAY_LEN(dst->pps); i++) {
+		if (!dst->pps[i]) {
+			continue;
+		}
+		copy = ast_strdup(dst->pps[i]);
+		if (!copy) {
+			dst->pps[i] = NULL;
+			goto fail;
+		}
+		dst->pps[i] = copy;
+	}
+	return 0;
+
+fail:
+	ast_free(dst->name);
+	dst->name = NULL;
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (dst->gpios[i] && dst->gpios[i] != src->gpios[i]) {
+			ast_free(dst->gpios[i]);
+		}
+		dst->gpios[i] = NULL;
+	}
+	for (i = 0; i < ARRAY_LEN(dst->pps); i++) {
+		if (dst->pps[i] && dst->pps[i] != src->pps[i]) {
+			ast_free(dst->pps[i]);
+		}
+		dst->pps[i] = NULL;
+	}
+	return -1;
+}
+
 /*!
  * \brief Store configuration.
  *	Initializes chan_usbradio and loads it with the configuration data.
@@ -5295,12 +5358,10 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 			if (!(o = ast_calloc(1, sizeof(*o)))) {
 				return NULL;
 			}
-			*o = usbradio_default;
-			o->name = ast_strdup(ctg);
-			o->pttkick[0] = -1;
-			o->pttkick[1] = -1;
-			o->hidthread = AST_PTHREADT_NULL;
-			o->audiothread = AST_PTHREADT_NULL;
+			if (usbradio_pvt_copy(o, &usbradio_default, ctg)) {
+				ast_free(o);
+				return NULL;
+			}
 			if (!usbradio_active) {
 				usbradio_active = o->name;
 			}
@@ -5389,6 +5450,7 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
 			snprintf(buf, sizeof(buf), "gpio%d", i + 1);
 			if (!strcmp(v->name, buf)) {
+				ast_free(o->gpios[i]);
 				o->gpios[i] = ast_strdup(v->value);
 			}
 		}
@@ -5398,6 +5460,7 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 			}
 			snprintf(buf, sizeof(buf), "pp%d", i);
 			if (!strcasecmp(v->name, buf)) {
+				ast_free(o->pps[i]);
 				o->pps[i] = ast_strdup(v->value);
 				haspp = 1;
 			}
@@ -5975,16 +6038,38 @@ static int unload_module(void)
 			ast_dsp_free(o->dsp);
 		}
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			if (o->gpios[i]) {
-				ast_free(o->gpios[i]);
-			}
+			ast_free(o->gpios[i]);
 		}
 		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-			if (o->pps[i]) {
-				ast_free(o->pps[i]);
-			}
+			ast_free(o->pps[i]);
+		}
+		ast_mutex_destroy(&o->echolock);
+		ast_mutex_destroy(&o->eepromlock);
+		ast_mutex_destroy(&o->usblock);
+		ast_mutex_destroy(&o->device_lock);
+		ast_mutex_destroy(&o->txqlock);
+		ast_mutex_destroy(&o->swap_lock);
+	}
+
+	/* general pvt is not on the device list, but store_config still inits it */
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (usbradio_default.gpios[i]) {
+			ast_free(usbradio_default.gpios[i]);
+			usbradio_default.gpios[i] = NULL;
 		}
 	}
+	for (i = 0; i < ARRAY_LEN(usbradio_default.pps); i++) {
+		if (usbradio_default.pps[i]) {
+			ast_free(usbradio_default.pps[i]);
+			usbradio_default.pps[i] = NULL;
+		}
+	}
+	ast_mutex_destroy(&usbradio_default.echolock);
+	ast_mutex_destroy(&usbradio_default.eepromlock);
+	ast_mutex_destroy(&usbradio_default.usblock);
+	ast_mutex_destroy(&usbradio_default.device_lock);
+	ast_mutex_destroy(&usbradio_default.txqlock);
+	ast_mutex_destroy(&usbradio_default.swap_lock);
 
 	ao2_cleanup(usbradio_tech.capabilities);
 	usbradio_tech.capabilities = NULL;
