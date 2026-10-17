@@ -1268,9 +1268,11 @@ static void *hidthread(void *arg)
 				/* HID thread monitors audio thread */
 				ast_radio_time(&audio_time_now);
 				if ((audio_time_now - o->lastaudiotime) > 1) {
+					struct ast_radio_pa_stream *ps = &o->pa;
+
 					simpleusb_log_fault(o, 0, "Channel %s: Audio process has died or is not responding.\n", o->name);
 					o->hasusb = 0;
-					Pa_AbortStream(o->pa->stream);
+					Pa_AbortStream(ps->stream);
 					break;
 				}
 			}
