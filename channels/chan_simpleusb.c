@@ -4123,6 +4123,68 @@ static void mixer_write(struct chan_simpleusb_pvt *o)
 	ast_mutex_unlock(&o->device_lock);
 }
 
+/* Copy src into dst, then give dst its own name, gpio, and pps strings. */
+static int simpleusb_pvt_copy(struct chan_simpleusb_pvt *dst, const struct chan_simpleusb_pvt *src, const char *name)
+{
+	int i;
+	char *copy;
+
+	*dst = *src;
+	dst->next = NULL;
+	dst->name = ast_strdup(name);
+	if (!dst->name) {
+		return -1;
+	}
+	dst->pttkick[0] = -1;
+	dst->pttkick[1] = -1;
+	dst->audiothread = AST_PTHREADT_NULL;
+	dst->hidthread = AST_PTHREADT_NULL;
+	dst->radio_device = NULL;
+	dst->owner = NULL;
+	dst->dsp = NULL;
+
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (!dst->gpios[i]) {
+			continue;
+		}
+		copy = ast_strdup(dst->gpios[i]);
+		if (!copy) {
+			dst->gpios[i] = NULL;
+			goto fail;
+		}
+		dst->gpios[i] = copy;
+	}
+	for (i = 0; i < ARRAY_LEN(dst->pps); i++) {
+		if (!dst->pps[i]) {
+			continue;
+		}
+		copy = ast_strdup(dst->pps[i]);
+		if (!copy) {
+			dst->pps[i] = NULL;
+			goto fail;
+		}
+		dst->pps[i] = copy;
+	}
+	return 0;
+
+fail:
+	ast_free(dst->name);
+	dst->name = NULL;
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (dst->gpios[i] && dst->gpios[i] != src->gpios[i]) {
+			ast_free(dst->gpios[i]);
+		}
+		dst->gpios[i] = NULL;
+	}
+	for (i = 0; i < ARRAY_LEN(dst->pps); i++) {
+		if (dst->pps[i] && dst->pps[i] != src->pps[i]) {
+			ast_free(dst->pps[i]);
+		}
+		dst->pps[i] = NULL;
+	}
+	return -1;
+}
+
 /*!
  * \brief Store configuration.
  *	Initializes chan_simpleusb and loads it with the configuration data.
@@ -4148,12 +4210,10 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 			if (!(o = ast_calloc(1, sizeof(*o)))) {
 				return NULL;
 			}
-			*o = simpleusb_default;
-			o->name = ast_strdup(ctg);
-			o->pttkick[0] = -1;
-			o->pttkick[1] = -1;
-			o->audiothread = AST_PTHREADT_NULL;
-			o->hidthread = AST_PTHREADT_NULL;
+			if (simpleusb_pvt_copy(o, &simpleusb_default, ctg)) {
+				ast_free(o);
+				return NULL;
+			}
 			if (!simpleusb_active) {
 				simpleusb_active = o->name;
 			}
@@ -4202,6 +4262,7 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
 			sprintf(buf, "gpio%d", i + 1);
 			if (!strcmp(v->name, buf)) {
+				ast_free(o->gpios[i]);
 				o->gpios[i] = ast_strdup(v->value);
 			}
 		}
@@ -4211,6 +4272,7 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 			}
 			sprintf(buf, "pp%d", i);
 			if (!strcasecmp(v->name, buf)) {
+				ast_free(o->pps[i]);
 				o->pps[i] = ast_strdup(v->value);
 				haspp = 1;
 			}
@@ -4539,19 +4601,41 @@ static int unload_module(void)
 			ast_dsp_free(o->dsp);
 		}
 		for (i = 0; i < GPIO_PINCOUNT; i++) {
-			if (o->gpios[i]) {
-				ast_free(o->gpios[i]);
-			}
+			ast_free(o->gpios[i]);
 		}
 		for (i = 0; i < ARRAY_LEN(o->pps); i++) {
-			if (o->pps[i]) {
-				ast_free(o->pps[i]);
-			}
+			ast_free(o->pps[i]);
 		}
 		ast_free(o->name);
 		simpleusb_release_device(o);
+		ast_mutex_destroy(&o->echolock);
+		ast_mutex_destroy(&o->eepromlock);
+		ast_mutex_destroy(&o->txqlock);
+		ast_mutex_destroy(&o->usblock);
+		ast_mutex_destroy(&o->device_lock);
+		ast_mutex_destroy(&o->swap_lock);
 		ast_free(o);
 	}
+
+	/* general pvt is not on the device list, but store_config still inits it */
+	for (i = 0; i < GPIO_PINCOUNT; i++) {
+		if (simpleusb_default.gpios[i]) {
+			ast_free(simpleusb_default.gpios[i]);
+			simpleusb_default.gpios[i] = NULL;
+		}
+	}
+	for (i = 0; i < ARRAY_LEN(simpleusb_default.pps); i++) {
+		if (simpleusb_default.pps[i]) {
+			ast_free(simpleusb_default.pps[i]);
+			simpleusb_default.pps[i] = NULL;
+		}
+	}
+	ast_mutex_destroy(&simpleusb_default.echolock);
+	ast_mutex_destroy(&simpleusb_default.eepromlock);
+	ast_mutex_destroy(&simpleusb_default.txqlock);
+	ast_mutex_destroy(&simpleusb_default.usblock);
+	ast_mutex_destroy(&simpleusb_default.device_lock);
+	ast_mutex_destroy(&simpleusb_default.swap_lock);
 
 #if DEBUG_CAPTURES == 1
 	if (frxcapraw) {
