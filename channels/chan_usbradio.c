@@ -2053,6 +2053,7 @@ static int usbradio_hangup(struct ast_channel *c)
 
 	o->stopaudiothread = 1;
 	o->stophid = 1;
+	ast_radio_pa_stop(&o->pa);
 	kickptt(o);
 	if (o->audiothread != AST_PTHREADT_NULL) {
 		pthread_join(o->audiothread, NULL);

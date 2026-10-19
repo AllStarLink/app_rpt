@@ -2014,13 +2014,13 @@ static int simpleusb_hangup(struct ast_channel *c)
 
 	o->stopaudiothread = 1;
 	o->stophidthread = 1;
+	ast_radio_pa_stop(&o->pa);
 	/* Wake HID's poll so it notices stophidthread / can drop PTT promptly. */
 	kickptt(o);
 	if (o->audiothread != AST_PTHREADT_NULL) {
 		pthread_join(o->audiothread, NULL);
 		o->audiothread = AST_PTHREADT_NULL;
 	}
-	ast_radio_pa_stop(&o->pa);
 	if (o->hidthread != AST_PTHREADT_NULL) {
 		pthread_join(o->hidthread, NULL);
 		o->hidthread = AST_PTHREADT_NULL;
