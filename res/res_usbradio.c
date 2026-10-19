@@ -2113,7 +2113,13 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps)
 {
 	PaError err;
 
-	if (!ps || !ps->stream) {
+	if (!ps) {
+		return;
+	}
+
+	ast_mutex_lock(&ps->stop_lock);
+	if (!ps->stream) {
+		ast_mutex_unlock(&ps->stop_lock);
 		return;
 	}
 
@@ -2133,6 +2139,7 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps)
 	ps->stream = NULL;
 	ps->active = 0;
 	pa_lib_release();
+	ast_mutex_unlock(&ps->stop_lock);
 }
 
 PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, volatile sig_atomic_t *stop)

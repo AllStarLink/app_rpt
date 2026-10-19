@@ -4166,6 +4166,7 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 	ast_mutex_init(&o->usblock);
 	ast_mutex_init(&o->device_lock);
 	ast_mutex_init(&o->swap_lock);
+	ast_mutex_init(&o->pa.stop_lock);
 	o->echomax = DEFAULT_ECHO_MAX;
 	/* fill other fields from configuration */
 	for (v = ast_variable_browse(cfg, ctg); v; v = v->next) {
@@ -4549,8 +4550,11 @@ static int unload_module(void)
 				ast_free(o->pps[i]);
 			}
 		}
+
+		ast_radio_pa_stop(&o->pa); /* Make sure HID didn't start a new one. */
 		ast_free(o->name);
 		simpleusb_release_device(o);
+		ast_mutex_destroy(&o->pa.stop_lock);
 		ast_free(o);
 	}
 

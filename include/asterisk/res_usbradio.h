@@ -31,6 +31,7 @@
 #include <libusb-1.0/libusb.h>
 #include <portaudio.h>
 #include <signal.h>
+#include <asterisk/lock.h>
 
 /*!
  * \brief CMxxx USB device identifiers.
@@ -585,6 +586,7 @@ void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *
  */
 struct ast_radio_pa_stream {
 	PaStream *stream;
+	ast_mutex_t stop_lock; /*!< Protects ast_radio_pa_stop multiple calls */
 	int active;
 	unsigned int input_channels;  /*!< Required and actual RX channel count for ast_radio_pa_open_device() */
 	unsigned int output_channels; /*!< Actual TX channel count after ast_radio_pa_open_device() */

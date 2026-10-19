@@ -5315,6 +5315,7 @@ static struct chan_usbradio_pvt *store_config(struct ast_config *cfg, const char
 	ast_mutex_init(&o->device_lock);
 	ast_mutex_init(&o->txqlock);
 	ast_mutex_init(&o->swap_lock);
+	ast_mutex_init(&o->pa.stop_lock);
 	o->echomax = DEFAULT_ECHO_MAX;
 	/* fill other fields from configuration */
 	for (v = ast_variable_browse(cfg, ctg); v; v = v->next) {
@@ -5968,7 +5969,8 @@ static int unload_module(void)
 			pthread_join(o->hidthread, NULL);
 			o->hidthread = AST_PTHREADT_NULL;
 		}
-
+		
+		ast_radio_pa_stop(&o->pa); /* Make sure HID didn't start a new one. */
 		usbradio_release_device(o);
 		if (o->pmrChan) {
 			destroyPmrChannel(o->pmrChan);
@@ -5987,8 +5989,8 @@ static int unload_module(void)
 				ast_free(o->pps[i]);
 			}
 		}
+		ast_mutex_destroy(&o->pa.stop_lock);
 	}
-
 	ao2_cleanup(usbradio_tech.capabilities);
 	usbradio_tech.capabilities = NULL;
 
