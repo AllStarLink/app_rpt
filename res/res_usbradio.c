@@ -2135,7 +2135,7 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps)
 	pa_lib_release();
 }
 
-PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop)
+PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, volatile sig_atomic_t *stop)
 {
 	if (!ps || !ps->stream || !buf) {
 		return paBadStreamPtr;

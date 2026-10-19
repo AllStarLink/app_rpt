@@ -1805,7 +1805,7 @@ static PaError usbradio_read_pa_stereo(struct chan_usbradio_pvt *o)
 		short mono_buf[AST_RADIO_PA_FRAMES_PER_BUFFER];
 		int i;
 
-		pa_res = ast_radio_pa_read(&o->pa, mono_buf, AST_RADIO_PA_FRAMES_PER_BUFFER, 40, &o->stopaudiothread);
+		pa_res = ast_radio_pa_read(&o->pa, mono_buf, AST_RADIO_PA_FRAMES_PER_BUFFER, &o->stopaudiothread);
 		if (pa_res == paNoError) {
 			for (i = AST_RADIO_PA_FRAMES_PER_BUFFER - 1; i >= 0; i--) {
 				stereo[i * 2] = mono_buf[i];
@@ -1815,7 +1815,7 @@ static PaError usbradio_read_pa_stereo(struct chan_usbradio_pvt *o)
 		return pa_res;
 	}
 
-	return ast_radio_pa_read(&o->pa, stereo, AST_RADIO_PA_FRAMES_PER_BUFFER, 40, &o->stopaudiothread);
+	return ast_radio_pa_read(&o->pa, stereo, AST_RADIO_PA_FRAMES_PER_BUFFER, &o->stopaudiothread);
 }
 
 /*!

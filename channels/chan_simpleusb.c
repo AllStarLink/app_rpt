@@ -2435,10 +2435,9 @@ static void *simpleusb_audio_thread(void *arg)
 
 			/* Read audio data from the USB sound device.
 			 * Sound data will arrive at 48000 samples per second
-			 * in mono format.  We should always have 20ms frames, 40ms timeout
-			 * as a reasonable max wait time.
+			 * in mono format.
 			 */
-			res = ast_radio_pa_read(&o->pa, o->simpleusb_read_buf, AST_RADIO_PA_FRAMES_PER_BUFFER, 40, &o->stopaudiothread);
+			res = ast_radio_pa_read(&o->pa, o->simpleusb_read_buf, AST_RADIO_PA_FRAMES_PER_BUFFER, &o->stopaudiothread);
 			if (res != paNoError) {
 				/* audio data not ready */
 				if (res == paInputOverflowed) {
