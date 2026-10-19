@@ -2137,15 +2137,11 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps)
 
 PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop)
 {
-	PaError err;
-
 	if (!ps || !ps->stream || !buf) {
 		return paBadStreamPtr;
 	}
 
-	err = Pa_ReadStream(ps->stream, buf, frames);
-	return err;
-
+	return Pa_ReadStream(ps->stream, buf, frames);
 }
 
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long pa_frames)
