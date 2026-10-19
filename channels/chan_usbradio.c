@@ -5969,7 +5969,6 @@ static int unload_module(void)
 			pthread_join(o->hidthread, NULL);
 			o->hidthread = AST_PTHREADT_NULL;
 		}
-		
 		ast_radio_pa_stop(&o->pa); /* Make sure HID didn't start a new one. */
 		usbradio_release_device(o);
 		if (o->pmrChan) {
