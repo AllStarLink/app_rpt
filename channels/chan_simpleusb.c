@@ -1297,7 +1297,7 @@ static void *hidthread(void *arg)
 				if ((audio_time_now - o->lastaudiotime) > 1) {
 					simpleusb_log_fault(o, 0, "Channel %s: Audio process has died or is not responding.\n", o->name);
 					o->hasusb = 0;
-					stream_cleanup(o);
+					ast_radio_pa_stop(&o->pa);
 					break;
 				}
 			}
