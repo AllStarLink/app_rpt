@@ -4532,7 +4532,7 @@ static int unload_module(void)
 			pthread_join(o->audiothread, NULL); /* wait for audio thread to end */
 			o->audiothread = AST_PTHREADT_NULL;
 		}
-		ast_radio_pa_stop(&o->pa);
+
 		if (o->hidthread != AST_PTHREADT_NULL) {
 			pthread_join(o->hidthread, NULL);
 			o->hidthread = AST_PTHREADT_NULL;
