@@ -5095,7 +5095,7 @@ static void *voter_timer(void *data)
 	while (run_forever && !ast_shutting_down()) {
 		/* Track client connections (timeouts) and endpoint sanity. */
 		struct timeval timeout_now, watchdog_wake_time, watchdog_lock_time, master_check_now, master_rx_snapshot;
-		int client_timed_out, master_timed_out, run_sanity, client_age_ms, master_age_ms;
+		int client_timed_out, master_timed_out, run_sanity, client_age_ms, master_age_ms, watchdog_wait_ms;
 		static unsigned int sanity_tick = 0;
 
 		/* Check and acknowledge our thread timer. This timer keeps our audio in sync (for IAX2). */
@@ -5126,7 +5126,7 @@ static void *voter_timer(void *data)
 		watchdog_wake_time = ast_radio_tvnow();
 		ast_mutex_lock(&voter_lock);
 		watchdog_lock_time = ast_radio_tvnow();
-		int watchdog_wait_ms = (int) ast_tvdiff_ms(watchdog_lock_time, watchdog_wake_time);
+		watchdog_wait_ms = (int) ast_tvdiff_ms(watchdog_lock_time, watchdog_wake_time);
 		if (watchdog_wait_ms >= 1) {
 			ast_debug(3, "VOTER watchdog: voter_lock wait=%d ms (wake=%ld.%06ld lock_acquired=%ld.%06ld)\n", watchdog_wait_ms,
 				(long) watchdog_wake_time.tv_sec, (long) watchdog_wake_time.tv_usec, (long) watchdog_lock_time.tv_sec,
