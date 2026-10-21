@@ -5126,10 +5126,11 @@ static void *voter_timer(void *data)
 		watchdog_wake_time = ast_radio_tvnow();
 		ast_mutex_lock(&voter_lock);
 		watchdog_lock_time = ast_radio_tvnow();
-		if (voter_tvdiff_ms(watchdog_lock_time, watchdog_wake_time) >= 1) {
-			ast_debug(3, "VOTER watchdog: voter_lock wait=%d ms (wake=%ld.%06ld lock_acquired=%ld.%06ld)\n",
-				voter_tvdiff_ms(watchdog_lock_time, watchdog_wake_time), (long) watchdog_wake_time.tv_sec,
-				(long) watchdog_wake_time.tv_usec, (long) watchdog_lock_time.tv_sec, (long) watchdog_lock_time.tv_usec);
+		int watchdog_wait_ms = (int) ast_tvdiff_ms(watchdog_lock_time, watchdog_wake_time);
+		if (watchdog_wait_ms >= 1) {
+			ast_debug(3, "VOTER watchdog: voter_lock wait=%d ms (wake=%ld.%06ld lock_acquired=%ld.%06ld)\n", watchdog_wait_ms,
+				(long) watchdog_wake_time.tv_sec, (long) watchdog_wake_time.tv_usec, (long) watchdog_lock_time.tv_sec,
+				(long) watchdog_lock_time.tv_usec);
 		}
 
 		/* If we don't have a master client (using mix mode clients), set
@@ -5215,7 +5216,7 @@ static void *voter_timer(void *data)
 					master_age_ms = voter_tvdiff_ms(master_check_now, master_rx_snapshot);
 					master_timed_out = master_age_ms > MASTER_TIMEOUT_MS;
 					ast_debug(2, "VOTER watchdog master: client=%s node=%u digest=%08x rx=%ld.%06ld check=%ld.%06ld age=%d ms limit=%d ms timed_out=%d\n",
-						client->name, client->nodenum, ntohl(client->digest), (long) master_rx_snapshot.tv_sec,
+						client->name, client->nodenum, client->digest, (long) master_rx_snapshot.tv_sec,
 						(long) master_rx_snapshot.tv_usec, (long) master_check_now.tv_sec, (long) master_check_now.tv_usec,
 						master_age_ms, MASTER_TIMEOUT_MS, master_timed_out);
 				}
@@ -5269,7 +5270,7 @@ static void *voter_timer(void *data)
 					 * exposes stale lastheardtime values.
 					 */
 					ast_debug(3, "VOTER watchdog client: client=%s node=%u digest=%08x last_rx=%ld.%06ld check=%ld.%06ld age=%d ms limit=%d ms timed_out=%d\n",
-						client->name, client->nodenum, ntohl(client->digest), (long) client->lastheardtime.tv_sec,
+						client->name, client->nodenum, client->digest, (long) client->lastheardtime.tv_sec,
 						(long) client->lastheardtime.tv_usec, (long) timeout_now.tv_sec, (long) timeout_now.tv_usec,
 						client_age_ms, CLIENT_TIMEOUT_MS, client_timed_out);
 					/* If the client has timed out, dump the connection. */
@@ -5408,6 +5409,7 @@ static void *voter_reader(void *data)
 		 * connect to.
 		 */
 		struct timeval packet_rx_time, previous_master_rx_time;
+		unsigned short packet_source_port;
 
 		ast_mutex_unlock(&voter_lock);
 
@@ -5437,6 +5439,8 @@ static void *voter_reader(void *data)
 			 * as critical, but we will use the same packet_rx_time to qualify them as well.
 			 */
 			if (recvlen >= (ssize_t) sizeof(VOTER_PACKET_HEADER)) {
+				/* Preserve the actual UDP source port before optional master_port rewriting. */
+				packet_source_port = sin.sin_port;
 				packet_rx_time = ast_radio_tvnow();
 				vph = (VOTER_PACKET_HEADER *) buf;
 				packet_valid = 1;
@@ -5552,7 +5556,7 @@ static void *voter_reader(void *data)
 				 * It records which client's lastheardtime was refreshed by this packet.
 				 */
 				ast_debug(3, "VOTER client RX timestamp: client=%s node=%u digest=%08x peer=%s:%u rx=%ld.%06ld payload=%u\n",
-					client->name, client->nodenum, ntohl(vph->digest), ast_inet_ntoa(sin.sin_addr), ntohs(sin.sin_port),
+					client->name, client->nodenum, ntohl(vph->digest), ast_inet_ntoa(sin.sin_addr), ntohs(packet_source_port),
 					(long) packet_rx_time.tv_sec, (long) packet_rx_time.tv_usec, ntohs(vph->payload_type));
 				break;
 			}
