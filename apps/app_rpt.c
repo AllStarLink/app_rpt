@@ -2557,12 +2557,15 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	}
 	if (l->chan) {
 		if (rpt_make_call(l->chan, tele, 999, deststr, "Remote Rx", "attempt_reconnect", myrpt->name, l->name)) {
+			struct ast_channel *chan;
+
 			ast_log(LOG_WARNING, "Unable to place call to %s/%s\n", deststr, tele);
-			ast_hangup(l->chan);
 			rpt_mutex_lock(&myrpt->lock);
 			l->retrytimer = RETRY_TIMER_MS;
+			chan = l->chan;
 			l->chan = NULL;
 			rpt_mutex_unlock(&myrpt->lock);
+			ast_hangup(chan);
 			ast_autoservice_stop(l->pchan);
 			return NULL;
 		}
@@ -4663,12 +4666,20 @@ static inline void safe_hangup(struct ast_channel *chan)
 	}
 }
 
-/*! \note myrpt->lock must not be held when calling */
-static inline void hangup_link_chan(struct rpt_link *l)
+/*!
+ * \note myrpt->lock must not be held when calling. l->chan is cleared under
+ * the lock before hangup so status readers never reference a freed channel.
+ */
+static inline void hangup_link_chan(struct rpt *myrpt, struct rpt_link *l)
 {
-	if (l->chan) {
-		safe_hangup(l->chan);
-		l->chan = NULL;
+	struct ast_channel *chan;
+
+	rpt_mutex_lock(&myrpt->lock);
+	chan = l->chan;
+	l->chan = NULL;
+	rpt_mutex_unlock(&myrpt->lock);
+	if (chan) {
+		safe_hangup(chan);
 	}
 }
 
@@ -4752,7 +4763,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	if (ast_shutting_down()) {
 		/* No REMDISC; cleanup also skips discpgm while shutting down. */
 		l->disced = RPT_LINK_DISCONNECT_SILENT;
-		hangup_link_chan(l);
+		hangup_link_chan(myrpt, l);
 		return 0;
 	}
 	if (l->chan && (CHAN_TECH(l->chan, "echolink") || CHAN_TECH(l->chan, "tlb"))) {
@@ -4775,7 +4786,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	 */
 	if (!l->outbound) {
 		if (l->disced != RPT_LINK_DISCONNECT_NONE) {
-			hangup_link_chan(l);
+			hangup_link_chan(myrpt, l);
 			if (l->disced == RPT_LINK_DISCONNECT) {
 				link_disconnect_finished(myrpt, l);
 			}
@@ -4790,13 +4801,13 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 				l->disctime = DISC_TIME;
 			}
 		}
-		hangup_link_chan(l);
+		hangup_link_chan(myrpt, l);
 		return 1;
 	}
 
 	/* Intentional outbound disconnect: do not redial; announce unless silent. */
 	if (l->disced != RPT_LINK_DISCONNECT_NONE) {
-		hangup_link_chan(l);
+		hangup_link_chan(myrpt, l);
 		if (l->disced == RPT_LINK_DISCONNECT) {
 			link_disconnect_finished(myrpt, l);
 		}
@@ -4804,11 +4815,19 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 	}
 
 	if (l->retrytimer) {
-		hangup_link_chan(l);
+		hangup_link_chan(myrpt, l);
+		/* An ANSWER inside the retry window set elaptime to -1, which stops
+		 * periodic_process_link() before it can redial or tear down the link. */
+		rpt_mutex_lock(&myrpt->lock);
+		l->elaptime = 0;
+		l->connecttime = ast_tv(0, 0); /* no longer connected */
+		l->lastkeytime = 0;
+		l->thisconnected = 0;
+		rpt_mutex_unlock(&myrpt->lock);
 		return 1;
 	}
 	if (l->hasconnected && (l->max_retries == MAX_RETRIES_PERM || l->retries < l->max_retries)) {
-		hangup_link_chan(l);
+		hangup_link_chan(myrpt, l);
 		rpt_mutex_lock(&myrpt->lock);
 		l->retrytimer = RETRY_TIMER_MS;
 		l->elaptime = 0;
@@ -5264,7 +5283,7 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 	rpt_frame_queue_free(&l->frame_queue);
 
 	/* Hang-up the channels */
-	hangup_link_chan(l);
+	hangup_link_chan(myrpt, l);
 
 	if (l->hasconnected) {
 		rpt_update_links(myrpt);
