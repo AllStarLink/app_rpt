@@ -328,6 +328,11 @@ int tlb_query_node_exists(const char *node)
 {
 	const struct ast_channel_tech *chan_tech = NULL;
 	int res = 0;
+	int datalen;
+
+	if (ast_strlen_zero(node)) {
+		return res;
+	}
 
 	chan_tech = ast_get_channel_tech("tlb");
 
@@ -336,7 +341,9 @@ int tlb_query_node_exists(const char *node)
 		return res;
 	}
 
-	if (!chan_tech->queryoption(NULL, TLB_QUERY_NODE_EXISTS, (void *) node, 0)) {
+	/* Supply a length pointer as required by the queryoption interface. */
+	datalen = strlen(node) + 1;
+	if (!chan_tech->queryoption(NULL, TLB_QUERY_NODE_EXISTS, (void *) node, &datalen)) {
 		res = 1;
 	}
 
