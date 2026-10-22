@@ -341,7 +341,7 @@ int tlb_query_node_exists(const char *node)
 		return res;
 	}
 
-	/* queryoption takes int *datalen; passing NULL used to log "Node number not supplied". */
+	/* Supply a length pointer as required by the queryoption interface. */
 	datalen = strlen(node) + 1;
 	if (!chan_tech->queryoption(NULL, TLB_QUERY_NODE_EXISTS, (void *) node, &datalen)) {
 		res = 1;
