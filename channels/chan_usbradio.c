@@ -1734,28 +1734,16 @@ static int soundcard_writeframe(struct chan_usbradio_pvt *o, short *data)
 		}
 	}
 
-	/*
-	 * Always write something so the USB TX buffer does not intentionally
-	 * underrun (same idea as simpleusb #1161). Radio PTT is HID-gated;
-	 * when unkeyed, feed silence instead of the XPMR TX buffer.
-	 */
-	if (!o->pmrChan->txPttIn && !o->pmrChan->txPttOut) {
-		data = silence_buf;
+	if (o->pmrChan->txPttIn || o->pmrChan->txPttOut) {
+		res = ast_radio_pa_write(&o->pa, data, AST_RADIO_PA_FRAMES_PER_BUFFER);
+		if (res < 0 && res != paOutputUnderflowed) {
+			usbradio_log_fault(o, 0, "Channel %s: PortAudio write failed (%s); restarting audio stream\n", o->name, Pa_GetErrorText(res));
+			/* Force HID reinit so recovery log clears the latch. */
+			o->hasusb = 0;
+			ast_radio_pa_stop(&o->pa);
+			return 0;
+		}
 	}
-
-	/*
-	 * ast_radio_pa_write() already primes one silence frame on
-	 * paOutputUnderflowed (#593 / #598). Treat that as success here.
-	 */
-	res = ast_radio_pa_write(&o->pa, data, AST_RADIO_PA_FRAMES_PER_BUFFER);
-	if (res < 0 && res != paOutputUnderflowed) {
-		usbradio_log_fault(o, 0, "Channel %s: PortAudio write failed (%s); restarting audio stream\n", o->name, Pa_GetErrorText(res));
-		/* Force HID reinit so recovery log clears the latch. */
-		o->hasusb = 0;
-		ast_radio_pa_stop(&o->pa);
-		return 0;
-	}
-
 	return AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS * (int) sizeof(short);
 }
 

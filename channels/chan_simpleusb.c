@@ -155,8 +155,6 @@ pthread_t pulserid;
 static const char *const cd_signal_type[] = { "no", "N/A", "N/A", "usb", "usbinvert", "pp", "ppinvert" };
 static const char *const sd_signal_type[] = { "no", "usb", "usbinvert", "N/A", "pp", "ppinvert" };
 
-static short silence_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS] = { 0 };
-
 /*!
  * \brief Descriptor for one of our channels.
  * There is one used for 'default' values (from the [general] entry in
@@ -2427,20 +2425,6 @@ static void *simpleusb_audio_thread(void *arg)
 							break;
 						}
 						continue;
-					}
-					/* No tx frames to write, write silence to keep the audio channel active */
-					res = soundcard_writeframe(o, silence_buf);
-					if (res != paNoError) {
-						/* audio data not ready */
-						if (res != paOutputUnderflowed) {
-							/* Underflow handled in soundcard_writeframe
-							 * all other errors require restart
-							 */
-							ast_debug(2, "PortAudio TX callback queue error %s", Pa_GetErrorText(res));
-							o->hasusb = 0;
-							stream_cleanup(o);
-							break;
-						}
 					}
 				}
 				break;
