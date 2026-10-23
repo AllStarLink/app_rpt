@@ -577,9 +577,10 @@ void ast_radio_print_audio_stats(int fd, struct audiostatistics *o, const char *
  * \brief PortAudio stream state shared by chan_simpleusb and chan_usbradio.
  *
  * Set ps->input_channels to the required RX channel count before calling
- * ast_radio_pa_open_device(). After opening, use ps->input_channels for RX
- * buffer layout and ps->output_channels for TX. Callers still pass stereo
- * interleaved TX to ast_radio_pa_write(); mono hardware is downmixed there.
+ * ast_radio_pa_open_device(). The PortAudio callback transfers audio through
+ * bounded RX/TX queues. After opening, use ps->input_channels for RX buffer
+ * layout and ps->output_channels for TX. Callers pass stereo interleaved TX
+ * to ast_radio_pa_write(); mono hardware is downmixed in the callback.
  * ast_radio_pa_read() and ast_radio_pa_write() take frames per channel
  * (typically AST_RADIO_PA_FRAMES_PER_BUFFER).
  */
@@ -588,6 +589,8 @@ struct ast_radio_pa_stream {
 	int active;
 	unsigned int input_channels;  /*!< Required and actual RX channel count for ast_radio_pa_open_device() */
 	unsigned int output_channels; /*!< Actual TX channel count after ast_radio_pa_open_device() */
+	void *callback_data; /*!< Private PortAudio callback queues */
+	unsigned int callback_count; /*!< Number of RX callback periods queued */
 };
 
 /* Open a stream using the exact PortAudio endpoints held by a device lease */
@@ -598,3 +601,4 @@ void ast_radio_pa_stop(struct ast_radio_pa_stream *ps);
 PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop);
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long frames);
 long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps);
+unsigned int ast_radio_pa_callback_count(const struct ast_radio_pa_stream *ps);

@@ -2047,12 +2047,115 @@ static PaDeviceIndex pa_find_device(const char *hw_device, int want_input, int w
 	return paNoDevice;
 }
 
+#define AST_RADIO_PA_CALLBACK_BUFFER_COUNT 8
+#define AST_RADIO_PA_CALLBACK_RX_BUFFER_FRAMES (AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_CALLBACK_BUFFER_COUNT)
+#define AST_RADIO_PA_CALLBACK_TX_BUFFER_COUNT 2
+#define AST_RADIO_PA_CALLBACK_TX_BUFFER_FRAMES (AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_CALLBACK_TX_BUFFER_COUNT)
+
+struct ast_radio_pa_callback_data {
+	struct ast_radio_pa_stream *stream_state;
+	unsigned int input_channels;
+	unsigned int output_channels;
+	unsigned int rx_read;
+	unsigned int rx_write;
+	unsigned int tx_read;
+	unsigned int tx_write;
+	int rx_overflow;
+	int tx_underflow;
+	short *rx_buffer;
+	short *tx_buffer;
+};
+
+static int ast_radio_pa_callback(const void *input_buffer, void *output_buffer, unsigned long frame_count,
+	const PaStreamCallbackTimeInfo *time_info, PaStreamCallbackFlags status_flags, void *user_data)
+{
+	struct ast_radio_pa_callback_data *data = user_data;
+	const short *input = input_buffer;
+	short *output = output_buffer;
+	unsigned int rx_write, rx_read, tx_write, tx_read;
+	unsigned long i;
+	int received_input = 0;
+
+	(void) time_info;
+
+	if (!data || !output) {
+		return paAbort;
+	}
+
+	if (frame_count) {
+		rx_write = __atomic_load_n(&data->rx_write, __ATOMIC_RELAXED);
+		rx_read = __atomic_load_n(&data->rx_read, __ATOMIC_ACQUIRE);
+		if (input && !(status_flags & paInputOverflow) &&
+			(frame_count <= AST_RADIO_PA_CALLBACK_RX_BUFFER_FRAMES - (rx_write - rx_read))) {
+			for (i = 0; i < frame_count; i++) {
+				unsigned int slot = (rx_write + i) % AST_RADIO_PA_CALLBACK_RX_BUFFER_FRAMES;
+				unsigned int channel;
+
+				for (channel = 0; channel < data->input_channels; channel++) {
+					data->rx_buffer[slot * AST_RADIO_PA_OUTPUT_CHANNELS + channel] =
+						input[i * data->input_channels + channel];
+				}
+			}
+			__atomic_store_n(&data->rx_write, rx_write + frame_count, __ATOMIC_RELEASE);
+			received_input = 1;
+		} else {
+			__atomic_store_n(&data->rx_overflow, 1, __ATOMIC_RELEASE);
+		}
+
+		tx_read = __atomic_load_n(&data->tx_read, __ATOMIC_RELAXED);
+		tx_write = __atomic_load_n(&data->tx_write, __ATOMIC_ACQUIRE);
+		for (i = 0; i < frame_count; i++) {
+			if (tx_read != tx_write) {
+				unsigned int slot = tx_read % AST_RADIO_PA_CALLBACK_TX_BUFFER_FRAMES;
+				short left = data->tx_buffer[slot * AST_RADIO_PA_OUTPUT_CHANNELS];
+				short right = data->tx_buffer[slot * AST_RADIO_PA_OUTPUT_CHANNELS + 1];
+
+				if (data->output_channels == 1) {
+					output[i] = (short) (((int) left + (int) right) / 2);
+				} else {
+					output[i * data->output_channels] = left;
+					output[i * data->output_channels + 1] = right;
+				}
+				tx_read++;
+			} else {
+				if (data->output_channels == 1) {
+					output[i] = 0;
+				} else {
+					output[i * data->output_channels] = 0;
+					output[i * data->output_channels + 1] = 0;
+				}
+				__atomic_store_n(&data->tx_underflow, 1, __ATOMIC_RELEASE);
+			}
+		}
+		__atomic_store_n(&data->tx_read, tx_read, __ATOMIC_RELEASE);
+		if (received_input) {
+			__atomic_fetch_add(&data->stream_state->callback_count, 1, __ATOMIC_RELEASE);
+		}
+	}
+
+	if (status_flags & paOutputUnderflow) {
+		__atomic_store_n(&data->tx_underflow, 1, __ATOMIC_RELEASE);
+	}
+
+	return paContinue;
+}
+
+static void ast_radio_pa_callback_data_free(struct ast_radio_pa_callback_data *data)
+{
+	if (data) {
+		ast_free(data->rx_buffer);
+		ast_free(data->tx_buffer);
+		ast_free(data);
+	}
+}
+
 PaError ast_radio_pa_open_device(struct ast_radio_pa_stream *ps, const struct ast_radio_device *device)
 {
 	PaStreamParameters input_params;
 	PaStreamParameters output_params;
 	PaError res;
 	const PaStreamInfo *si;
+	struct ast_radio_pa_callback_data *callback_data;
 
 	if (!ps) {
 		return paBadStreamPtr;
@@ -2067,9 +2170,30 @@ PaError ast_radio_pa_open_device(struct ast_radio_pa_stream *ps, const struct as
 
 	ps->stream = NULL;
 	ps->active = 0;
+	ps->callback_data = NULL;
+	ps->callback_count = 0;
 	if (pa_lib_acquire() < 0) {
 		return paInternalError;
 	}
+
+	callback_data = ast_calloc(1, sizeof(*callback_data));
+	if (!callback_data) {
+		pa_lib_release();
+		return paInsufficientMemory;
+	}
+	callback_data->stream_state = ps;
+	callback_data->input_channels = ps->input_channels;
+	callback_data->output_channels = ps->output_channels;
+	callback_data->rx_buffer = ast_calloc(AST_RADIO_PA_CALLBACK_RX_BUFFER_FRAMES * AST_RADIO_PA_OUTPUT_CHANNELS,
+		sizeof(*callback_data->rx_buffer));
+	callback_data->tx_buffer = ast_calloc(AST_RADIO_PA_CALLBACK_TX_BUFFER_FRAMES * AST_RADIO_PA_OUTPUT_CHANNELS,
+		sizeof(*callback_data->tx_buffer));
+	if (!callback_data->rx_buffer || !callback_data->tx_buffer) {
+		ast_radio_pa_callback_data_free(callback_data);
+		pa_lib_release();
+		return paInsufficientMemory;
+	}
+	ps->callback_data = callback_data;
 
 	/* Open the exact PortAudio endpoints retained by the device lease */
 	input_params.device = device->pa_input_device;
@@ -2084,12 +2208,14 @@ PaError ast_radio_pa_open_device(struct ast_radio_pa_stream *ps, const struct as
 	output_params.hostApiSpecificStreamInfo = NULL;
 
 	res = Pa_OpenStream(&ps->stream, &input_params, &output_params, AST_RADIO_PA_SAMPLE_RATE, AST_RADIO_PA_FRAMES_PER_BUFFER,
-		paNoFlag, NULL, NULL);
+		paNoFlag, ast_radio_pa_callback, callback_data);
 	if (res != paNoError) {
 		if (ps->stream) {
 			Pa_CloseStream(ps->stream);
 			ps->stream = NULL;
 		}
+		ast_radio_pa_callback_data_free(callback_data);
+		ps->callback_data = NULL;
 		pa_lib_release();
 		return res;
 	}
@@ -2105,10 +2231,23 @@ PaError ast_radio_pa_open_device(struct ast_radio_pa_stream *ps, const struct as
 PaError ast_radio_pa_start(struct ast_radio_pa_stream *ps)
 {
 	PaError res;
+	struct ast_radio_pa_callback_data *data;
 
 	if (!ps || !ps->stream) {
 		return paBadStreamPtr;
 	}
+
+	data = ps->callback_data;
+	if (!data) {
+		return paBadStreamPtr;
+	}
+	__atomic_store_n(&data->rx_read, 0, __ATOMIC_RELAXED);
+	__atomic_store_n(&data->rx_write, 0, __ATOMIC_RELAXED);
+	__atomic_store_n(&data->tx_read, 0, __ATOMIC_RELAXED);
+	__atomic_store_n(&data->tx_write, 0, __ATOMIC_RELAXED);
+	__atomic_store_n(&ps->callback_count, 0, __ATOMIC_RELAXED);
+	__atomic_store_n(&data->rx_overflow, 0, __ATOMIC_RELAXED);
+	__atomic_store_n(&data->tx_underflow, 0, __ATOMIC_RELAXED);
 
 	res = Pa_StartStream(ps->stream);
 	if (res == paNoError) {
@@ -2120,79 +2259,85 @@ PaError ast_radio_pa_start(struct ast_radio_pa_stream *ps)
 void ast_radio_pa_stop(struct ast_radio_pa_stream *ps)
 {
 	PaError err;
+	struct ast_radio_pa_callback_data *data;
 
-	if (!ps || !ps->stream) {
+	if (!ps) {
 		return;
 	}
 
-	if (ps->active) {
-		err = Pa_AbortStream(ps->stream);
-		if (err != paNoError) {
-			/* Common after USB yank; Abort/Close often fail once the host device is gone. */
-			ast_debug(3, "Pa_AbortStream failed: %s\n", Pa_GetErrorText(err));
+	if (ps->stream) {
+		if (ps->active) {
+			err = Pa_AbortStream(ps->stream);
+			if (err != paNoError) {
+				/* Common after USB yank; Abort/Close often fail once the host device is gone. */
+				ast_debug(3, "Pa_AbortStream failed: %s\n", Pa_GetErrorText(err));
+			}
 		}
+
+		err = Pa_CloseStream(ps->stream);
+		if (err != paNoError) {
+			ast_debug(3, "Pa_CloseStream failed: %s\n", Pa_GetErrorText(err));
+		}
+
+		ps->stream = NULL;
+		pa_lib_release();
 	}
 
-	err = Pa_CloseStream(ps->stream);
-	if (err != paNoError) {
-		ast_debug(3, "Pa_CloseStream failed: %s\n", Pa_GetErrorText(err));
-	}
-
-	ps->stream = NULL;
+	data = ps->callback_data;
+	ast_radio_pa_callback_data_free(data);
+	ps->callback_data = NULL;
 	ps->active = 0;
-	pa_lib_release();
 }
 
 PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned long frames, int timeout_ms, volatile sig_atomic_t *stop)
 {
 	int64_t start;
-	PaError err;
+	struct ast_radio_pa_callback_data *data;
 
 	if (!ps || !ps->stream || !buf) {
+		return paBadStreamPtr;
+	}
+	data = ps->callback_data;
+	if (!data || frames > AST_RADIO_PA_CALLBACK_RX_BUFFER_FRAMES) {
 		return paBadStreamPtr;
 	}
 
 	start = pa_now_ms();
 	while (!stop || !(*stop)) {
-		long avail;
-		int64_t elapsed_ms, remaining_ms;
-		unsigned long missing, estimated_us, sleep_us;
+		unsigned int rx_read = __atomic_load_n(&data->rx_read, __ATOMIC_RELAXED);
+		unsigned int rx_write = __atomic_load_n(&data->rx_write, __ATOMIC_ACQUIRE);
+		unsigned int available = rx_write - rx_read;
 
-		/*
-		 * Pa_GetStreamReadAvailable() uses snd_pcm_avail_update(), which reports the
-		 * hardware position as of the last period interrupt. PortAudio's ALSA
-		 * GetStreamTime() calls snd_pcm_status() on the capture PCM, which makes the
-		 * kernel refresh that position, so the count below is current to the USB
-		 * packet instead of up to a period old. Without it the sleep estimate
-		 * overshoots and the reads drift late until capture overruns.
-		 */
-		Pa_GetStreamTime(ps->stream);
-		avail = Pa_GetStreamReadAvailable(ps->stream);
+		if (available >= frames) {
+			unsigned long i;
 
-		if (avail < 0) {
-			return (PaError) avail;
+			for (i = 0; i < frames; i++) {
+				unsigned int slot = (rx_read + i) % AST_RADIO_PA_CALLBACK_RX_BUFFER_FRAMES;
+				unsigned int channel;
+
+				for (channel = 0; channel < data->input_channels; channel++) {
+					buf[i * data->input_channels + channel] =
+						data->rx_buffer[slot * AST_RADIO_PA_OUTPUT_CHANNELS + channel];
+				}
+			}
+			__atomic_store_n(&data->rx_read, rx_read + frames, __ATOMIC_RELEASE);
+			return __atomic_exchange_n(&data->rx_overflow, 0, __ATOMIC_ACQ_REL) ? paInputOverflowed : paNoError;
 		}
 
-		/* Read ready audio before the timeout check so a block that lands during the last sleep is not dropped. */
-		if ((unsigned long) avail >= frames) {
-			err = Pa_ReadStream(ps->stream, buf, frames);
-			return err;
+		{
+			int64_t elapsed_ms = pa_now_ms() - start;
+			int64_t remaining_ms;
+			unsigned long missing, estimated_us, sleep_us;
+
+			if (elapsed_ms >= timeout_ms) {
+				return paTimedOut;
+			}
+			remaining_ms = timeout_ms - elapsed_ms;
+			missing = frames - available;
+			estimated_us = (missing * 1000000UL + AST_RADIO_PA_SAMPLE_RATE - 1) / AST_RADIO_PA_SAMPLE_RATE;
+			sleep_us = MIN(estimated_us + 1000, remaining_ms * 1000UL);
+			usleep((useconds_t) sleep_us);
 		}
-
-		elapsed_ms = pa_now_ms() - start;
-		if (elapsed_ms >= timeout_ms) {
-			return paTimedOut;
-		}
-
-		missing = frames - (unsigned long) avail;
-		remaining_ms = timeout_ms - elapsed_ms;
-
-		/* Time for the missing frames at 48 kHz, rounded up. */
-		estimated_us = (missing * 1000000UL + AST_RADIO_PA_SAMPLE_RATE - 1) / AST_RADIO_PA_SAMPLE_RATE;
-
-		/* Margin covers the 1 ms USB packet granularity; never sleep past the timeout. */
-		sleep_us = MIN(estimated_us + 1000, remaining_ms * 1000UL);
-		usleep((useconds_t) sleep_us);
 	}
 
 	return paTimedOut;
@@ -2200,9 +2345,9 @@ PaError ast_radio_pa_read(struct ast_radio_pa_stream *ps, short *buf, unsigned l
 
 PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, unsigned long pa_frames)
 {
-	PaError res;
-	const short *tx = data;
-	short mono_buf[AST_RADIO_PA_FRAMES_PER_BUFFER];
+	struct ast_radio_pa_callback_data *callback_data;
+	unsigned int tx_read, tx_write;
+	unsigned long i;
 
 	if (!ps || !ps->stream || !data) {
 		return paBadStreamPtr;
@@ -2213,55 +2358,51 @@ PaError ast_radio_pa_write(struct ast_radio_pa_stream *ps, const short *data, un
 		return paBufferTooBig;
 	}
 
-	/*
-	 * Callers always pass stereo interleaved samples. Mono URIs (AIOC) open
-	 * with one output channel; average L/R like OSS/ALSA plug conversion did.
-	 */
-	if (ps->output_channels == 1) {
-		unsigned long i;
-
-		for (i = 0; i < pa_frames; i++) {
-			mono_buf[i] = (short) (((int) data[i * 2] + (int) data[i * 2 + 1]) / 2);
-		}
-		tx = mono_buf;
+	callback_data = ps->callback_data;
+	if (!callback_data) {
+		return paBadStreamPtr;
 	}
 
-	res = Pa_WriteStream(ps->stream, tx, pa_frames);
-	if (res == paOutputUnderflowed) {
-		PaError prime_res;
-		/* Sized for stereo; unused half is fine when priming mono. */
-		short null_buf[AST_RADIO_PA_FRAMES_PER_BUFFER * AST_RADIO_PA_OUTPUT_CHANNELS] = { 0 };
-		long frames_available;
-
-		/*
-		 * Prime the stream with one silence frame so the USB buffer does not
-		 * stay empty (choppy TX). See #593 / #598. Propagate a real failure
-		 * from the silence write so callers can restart the stream.
-		 */
-		frames_available = ast_radio_pa_write_available(ps);
-
-		if ((frames_available > 0) && (frames_available >= (long) pa_frames)) {
-			ast_debug(6, "PortAudio write stream underflow, priming with %ld silence frames\n", pa_frames);
-			prime_res = Pa_WriteStream(ps->stream, null_buf, pa_frames);
-			if (prime_res != paNoError) {
-				return prime_res;
-			}
-		} else {
-			ast_debug(6, "PortAudio write stream underflow, Unable to prime with %ld silence frames, only %ld available\n",
-				pa_frames, frames_available);
-		}
+	tx_read = __atomic_load_n(&callback_data->tx_read, __ATOMIC_ACQUIRE);
+	tx_write = __atomic_load_n(&callback_data->tx_write, __ATOMIC_RELAXED);
+	if (AST_RADIO_PA_CALLBACK_TX_BUFFER_FRAMES - (tx_write - tx_read) < pa_frames) {
+		return paOutputUnderflowed;
 	}
 
-	return res;
+	for (i = 0; i < pa_frames; i++) {
+		unsigned int slot = (tx_write + i) % AST_RADIO_PA_CALLBACK_TX_BUFFER_FRAMES;
+
+		callback_data->tx_buffer[slot * AST_RADIO_PA_OUTPUT_CHANNELS] = data[i * AST_RADIO_PA_OUTPUT_CHANNELS];
+		callback_data->tx_buffer[slot * AST_RADIO_PA_OUTPUT_CHANNELS + 1] = data[i * AST_RADIO_PA_OUTPUT_CHANNELS + 1];
+	}
+	__atomic_store_n(&callback_data->tx_write, tx_write + pa_frames, __ATOMIC_RELEASE);
+	return __atomic_exchange_n(&callback_data->tx_underflow, 0, __ATOMIC_ACQ_REL) ? paOutputUnderflowed : paNoError;
 }
 
 long ast_radio_pa_write_available(struct ast_radio_pa_stream *ps)
 {
+	struct ast_radio_pa_callback_data *data;
+	unsigned int tx_read, tx_write;
+
 	if (!ps || !ps->stream) {
 		return -1;
 	}
+	data = ps->callback_data;
+	if (!data) {
+		return -1;
+	}
 
-	return Pa_GetStreamWriteAvailable(ps->stream);
+	tx_read = __atomic_load_n(&data->tx_read, __ATOMIC_ACQUIRE);
+	tx_write = __atomic_load_n(&data->tx_write, __ATOMIC_RELAXED);
+	return AST_RADIO_PA_CALLBACK_TX_BUFFER_FRAMES - (long) (tx_write - tx_read);
+}
+
+unsigned int ast_radio_pa_callback_count(const struct ast_radio_pa_stream *ps)
+{
+	if (!ps) {
+		return 0;
+	}
+	return __atomic_load_n(&ps->callback_count, __ATOMIC_ACQUIRE);
 }
 
 /* Load our configuration */

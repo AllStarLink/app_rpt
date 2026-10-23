@@ -1125,6 +1125,8 @@ static void *hidthread(void *arg)
 	int detach_failed = 0;
 	int claim_failed = 0;
 	int pipe_failed = 0;
+	unsigned int last_callback_count;
+	struct timeval last_callback_time;
 
 	ast_debug(2, "hidthread has started");
 	/* enable gpio_set so that we will write GPIO information upon start up */
@@ -1245,6 +1247,8 @@ static void *hidthread(void *arg)
 		rfds[0].events = POLLIN;
 
 		ast_radio_time(&o->lasthidtime);
+		last_callback_count = ast_radio_pa_callback_count(&o->pa);
+		last_callback_time = ast_radio_tvnow();
 
 		/* Reset the failure flags, we succeeded */
 		init_audio_failed = 0;
@@ -1264,6 +1268,19 @@ static void *hidthread(void *arg)
 			time_t audio_time_now = 0;
 
 			then = ast_radio_tvnow();
+			if (o->audio_thread_ready) {
+				unsigned int callback_count = ast_radio_pa_callback_count(&o->pa);
+
+				if (callback_count != last_callback_count) {
+					last_callback_count = callback_count;
+					last_callback_time = ast_radio_tvnow();
+				} else if (ast_tvdiff_ms(ast_radio_tvnow(), last_callback_time) > 1000) {
+					simpleusb_log_fault(o, 0,
+						"Channel %s: PortAudio callback stopped delivering audio frames; resetting the USB device\n", o->name);
+					o->hasusb = 0;
+					break;
+				}
+			}
 			if (o->lastaudiotime) {
 				/* HID thread monitors audio thread */
 				ast_radio_time(&audio_time_now);
@@ -1599,6 +1616,12 @@ static void *hidthread(void *arg)
 			libusb_close(usb_handle);
 			usb_handle = NULL;
 		}
+		for (i = 0; i < 100 && !o->stophidthread && o->audio_thread_ready; i++) {
+			usleep(10000);
+		}
+		if (!o->stophidthread && o->audio_thread_ready) {
+			simpleusb_log_fault(o, 0, "Channel %s: Audio thread did not stop before USB device reset\n", o->name);
+		}
 		/* Park the lease after both HID and audio have stopped for a device swap */
 		if (simpleusb_swap_hid_wait(o)) {
 			continue;
@@ -1647,7 +1670,7 @@ static int soundcard_writeframe(struct chan_simpleusb_pvt *o, short *data)
 
 	res = ast_radio_pa_write(&o->pa, data, AST_RADIO_PA_FRAMES_PER_BUFFER);
 	if (res < 0 && res != paOutputUnderflowed) {
-		ast_debug(2, "Pa_WriteStream Error %s", Pa_GetErrorText(res));
+		ast_debug(2, "PortAudio TX callback queue error %s", Pa_GetErrorText(res));
 	}
 
 	ast_radio_check_audio(data, &o->txaudiostats, AST_RADIO_PA_48K_STEREO_SAMPLES, 0);
@@ -2131,7 +2154,11 @@ static void *simpleusb_audio_thread(void *arg)
 		ast_radio_time(&o->lastaudiotime);
 
 		if (!o->hasusb) {
-			simpleusb_swap_audio_stopped(o);
+			if (o->pa.active) {
+				stream_cleanup(o);
+			} else {
+				simpleusb_swap_audio_stopped(o);
+			}
 			ast_debug(5, "Audio not ready");
 			usleep(DEVICE_RETRY);
 			continue;
@@ -2253,13 +2280,11 @@ static void *simpleusb_audio_thread(void *arg)
 				if (o->txkeyed) {
 					ast_debug(7, "blocks used %d, Dest Buffer %d", num_frames, o->simpleusb_write_dst);
 				}
-				/* Check for room in the write buffer.  If the device goes unavailable or
-				 * there is not room in the buffer, Pa_WriteStream will hang.
-				 */
+				/* Check for room in the callback TX queue before writing a frame. */
 				frames_available = ast_radio_pa_write_available(&o->pa);
 
 				if (frames_available < 0) {
-					ast_debug(2, "Pa_GetStreamWriteAvailable error %s", Pa_GetErrorText(frames_available));
+					ast_debug(2, "PortAudio TX callback queue unavailable\n");
 					o->usb_faulted = 1;
 					o->hasusb = 0;
 					stream_cleanup(o);
@@ -2361,7 +2386,7 @@ static void *simpleusb_audio_thread(void *arg)
 										/* Underflow handled in soundcard_writeframe
 										 * all other errors require restart
 										 */
-										ast_debug(2, "Pa_WriteStream error %s", Pa_GetErrorText(res));
+										ast_debug(2, "PortAudio TX callback queue error %s", Pa_GetErrorText(res));
 										o->usb_faulted = 1;
 										o->hasusb = 0;
 										stream_cleanup(o);
@@ -2411,7 +2436,7 @@ static void *simpleusb_audio_thread(void *arg)
 							/* Underflow handled in soundcard_writeframe
 							 * all other errors require restart
 							 */
-							ast_debug(2, "Pa_WriteStream error %s", Pa_GetErrorText(res));
+							ast_debug(2, "PortAudio TX callback queue error %s", Pa_GetErrorText(res));
 							o->hasusb = 0;
 							stream_cleanup(o);
 							break;
