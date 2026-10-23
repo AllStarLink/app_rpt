@@ -2462,7 +2462,6 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	if (val) {
 		instp->denylist_buf = ast_strdup(val);
 		if (!instp->denylist_buf) {
-			ast_log(LOG_ERROR, "Cannot allocate deny list for %s\n", ctg);
 			ast_mutex_destroy(&instp->lock);
 			ast_free(instp);
 			return -1;
@@ -2473,7 +2472,6 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	if (val) {
 		instp->permitlist_buf = ast_strdup(val);
 		if (!instp->permitlist_buf) {
-			ast_log(LOG_ERROR, "Cannot allocate permit list for %s\n", ctg);
 			ast_mutex_destroy(&instp->lock);
 			ast_free(instp->denylist_buf);
 			ast_free(instp);
