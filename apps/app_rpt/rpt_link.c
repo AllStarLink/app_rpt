@@ -232,6 +232,30 @@ void rpt_link_demote_retries(struct rpt_link *l)
 	l->retries = l->max_retries + 1;
 }
 
+void rpt_link_peer_ip(struct rpt *myrpt, struct rpt_link *l, char *buf, size_t len)
+{
+	struct ast_channel *chan = NULL;
+
+	rpt_mutex_lock(&myrpt->lock);
+	if (l->chan) {
+		chan = ast_channel_ref(l->chan);
+	}
+	rpt_mutex_unlock(&myrpt->lock);
+
+	if (!chan) {
+		ast_copy_string(buf, "(none)", len);
+		return;
+	}
+
+	buf[0] = '\0';
+	/* IAXPEER(CURRENTCHANNEL) dereferences the IAX call without checking it, and
+	 * the call can be torn down at any time; CHANNEL(peerip) locks and checks it. */
+	if (CHAN_TECH(chan, "IAX2") && ast_func_read(chan, "CHANNEL(peerip)", buf, len)) {
+		buf[0] = '\0';
+	}
+	ast_channel_unref(chan);
+}
+
 void rpt_link_stop_retries_common(struct rpt_link *l, enum rpt_link_disconnect disced)
 {
 	rpt_link_demote_retries(l);
