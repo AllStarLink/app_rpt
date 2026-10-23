@@ -5094,8 +5094,8 @@ static void *voter_timer(void *data)
 
 	while (run_forever && !ast_shutting_down()) {
 		/* Track client connections (timeouts) and endpoint sanity. */
-		struct timeval timeout_now;
-		int client_timed_out, master_timed_out, run_sanity;
+		struct timeval timeout_now, watchdog_wake_time, watchdog_lock_time, master_check_now, master_rx_snapshot;
+		int client_timed_out, master_timed_out, run_sanity, client_age_ms, master_age_ms, watchdog_wait_ms;
 		static unsigned int sanity_tick = 0;
 
 		/* Check and acknowledge our thread timer. This timer keeps our audio in sync (for IAX2). */
@@ -5118,7 +5118,20 @@ static void *voter_timer(void *data)
 			}
 		}
 
+		/* Record how long this watchdog pass waits to acquire voter_lock. This is
+		 * diagnostic only: a long wait can delay evaluation even when packet receive
+		 * timestamps themselves are accurate. Log only noticeable delays to avoid
+		 * producing one message per 20 ms timer tick during normal operation.
+		 */
+		watchdog_wake_time = ast_radio_tvnow();
 		ast_mutex_lock(&voter_lock);
+		watchdog_lock_time = ast_radio_tvnow();
+		watchdog_wait_ms = (int) ast_tvdiff_ms(watchdog_lock_time, watchdog_wake_time);
+		if (watchdog_wait_ms >= 1) {
+			ast_debug(3, "VOTER watchdog: voter_lock wait=%d ms (wake=%ld.%06ld lock_acquired=%ld.%06ld)\n", watchdog_wait_ms,
+				(long) watchdog_wake_time.tv_sec, (long) watchdog_wake_time.tv_usec, (long) watchdog_lock_time.tv_sec,
+				(long) watchdog_lock_time.tv_usec);
+		}
 
 		/* If we don't have a master client (using mix mode clients), set
 		 * master_time.vtime_sec from the system clock here. Otherwise,
@@ -5194,8 +5207,18 @@ static void *voter_timer(void *data)
 					 * negative value, and cause the master client to timeout. We're avoiding a race.
 					 *
 					 * If the current master client is still good, master_timed_out will continue to be false.
+					 *
+					 * Snapshot the timestamp while holding master_rx_lock, then use and log that same value after
+					 * the lock is released.
 					 */
-					master_timed_out = voter_tvdiff_ms(ast_radio_tvnow(), master_rx_time) > MASTER_TIMEOUT_MS;
+					master_rx_snapshot = master_rx_time;
+					master_check_now = ast_radio_tvnow();
+					master_age_ms = voter_tvdiff_ms(master_check_now, master_rx_snapshot);
+					master_timed_out = master_age_ms > MASTER_TIMEOUT_MS;
+					ast_debug(2, "VOTER watchdog master: client=%s node=%u digest=%08x rx=%ld.%06ld check=%ld.%06ld age=%d ms limit=%d ms timed_out=%d\n",
+						client->name, client->nodenum, client->digest, (long) master_rx_snapshot.tv_sec,
+						(long) master_rx_snapshot.tv_usec, (long) master_check_now.tv_sec, (long) master_check_now.tv_usec,
+						master_age_ms, MASTER_TIMEOUT_MS, master_timed_out);
 				}
 				ast_mutex_unlock(&master_rx_lock);
 				break; /* There should be only one active master, so when we're done, we're done. */
@@ -5208,6 +5231,10 @@ static void *voter_timer(void *data)
 			 * is healthy, we run the else branch to check all other clients.
 			 */
 			if (master_timed_out) {
+				/* Correlate the timeout decision with the receive timestamp and the watchdog check above. */
+				ast_debug(2, "VOTER watchdog master DISCONNECT: client=%s node=%u age=%d ms limit=%d ms rx=%ld.%06ld check=%ld.%06ld\n",
+					client->name, client->nodenum, master_age_ms, MASTER_TIMEOUT_MS, (long) master_rx_snapshot.tv_sec,
+					(long) master_rx_snapshot.tv_usec, (long) master_check_now.tv_sec, (long) master_check_now.tv_usec);
 				ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (timeout)\n", client->nodenum, client->name);
 				ast_log(LOG_WARNING, "Lost master timing client, disconnecting remaining clients.\n");
 				ast_log(LOG_NOTICE, "VOTER %u: Master changed from client %s to NONE\n", client->nodenum, client->name);
@@ -5236,10 +5263,21 @@ static void *voter_timer(void *data)
 					if (client->ismaster && client->curmaster) {
 						continue;
 					}
-					client_timed_out = !ast_tvzero(client->lastheardtime) &&
-									   (voter_tvdiff_ms(timeout_now, client->lastheardtime) > CLIENT_TIMEOUT_MS);
+					client_age_ms = ast_tvzero(client->lastheardtime) ? -1 : voter_tvdiff_ms(timeout_now, client->lastheardtime);
+					client_timed_out = !ast_tvzero(client->lastheardtime) && (client_age_ms > CLIENT_TIMEOUT_MS);
+					/*
+					 * Log the same reference time and age used by the ordinary-client timeout comparison. This also
+					 * exposes stale lastheardtime values.
+					 */
+					ast_debug(3, "VOTER watchdog client: client=%s node=%u digest=%08x last_rx=%ld.%06ld check=%ld.%06ld age=%d ms limit=%d ms timed_out=%d\n",
+						client->name, client->nodenum, client->digest, (long) client->lastheardtime.tv_sec,
+						(long) client->lastheardtime.tv_usec, (long) timeout_now.tv_sec, (long) timeout_now.tv_usec,
+						client_age_ms, CLIENT_TIMEOUT_MS, client_timed_out);
 					/* If the client has timed out, dump the connection. */
 					if (client_timed_out) {
+						ast_debug(2, "VOTER watchdog client DISCONNECT: client=%s node=%u age=%d ms limit=%d ms last_rx=%ld.%06ld check=%ld.%06ld\n",
+							client->name, client->nodenum, client_age_ms, CLIENT_TIMEOUT_MS, (long) client->lastheardtime.tv_sec,
+							(long) client->lastheardtime.tv_usec, (long) timeout_now.tv_sec, (long) timeout_now.tv_usec);
 						ast_log(LOG_NOTICE, "VOTER %u: Client %s disconnect (timeout)\n", client->nodenum, client->name);
 						voter_client_reset_connection(client);
 					}
@@ -5371,6 +5409,7 @@ static void *voter_reader(void *data)
 		 * connect to.
 		 */
 		struct timeval packet_rx_time, previous_master_rx_time;
+		unsigned short packet_source_port;
 
 		ast_mutex_unlock(&voter_lock);
 
@@ -5400,9 +5439,18 @@ static void *voter_reader(void *data)
 			 * as critical, but we will use the same packet_rx_time to qualify them as well.
 			 */
 			if (recvlen >= (ssize_t) sizeof(VOTER_PACKET_HEADER)) {
+				/* Preserve the actual UDP source port before optional master_port rewriting. */
+				packet_source_port = sin.sin_port;
 				packet_rx_time = ast_radio_tvnow();
 				vph = (VOTER_PACKET_HEADER *) buf;
 				packet_valid = 1;
+				/*
+				 * This is a raw receive observation, before authentication/client matching.
+				 * Use the matched-client diagnostics below to identify authenticated traffic.
+				 */
+				ast_debug(7, "VOTER UDP RX: peer=%s:%u rx=%ld.%06ld len=%d payload=%u digest=%08x\n", ast_inet_ntoa(sin.sin_addr),
+					ntohs(sin.sin_port), (long) packet_rx_time.tv_sec, (long) packet_rx_time.tv_usec, (int) recvlen,
+					ntohs(vph->payload_type), ntohl(vph->digest));
 				ast_debug(7, "Received network packet, len %d payload %d challenge %s digest %08x\n", (int) recvlen,
 					ntohs(vph->payload_type), vph->challenge, ntohl(vph->digest));
 
@@ -5423,6 +5471,14 @@ static void *voter_reader(void *data)
 						previous_master_rx_time = master_rx_time;
 						master_rx_time = packet_rx_time;
 						master_rx_updated = 1;
+						/* Log the inter-arrival interval for packets matching the currently
+						 * registered master digest. This update intentionally occurs before
+						 * voter_lock is acquired, so it can be compared with watchdog timing.
+						 */
+						ast_debug(3, "VOTER master RX timestamp: digest=%08x previous=%ld.%06ld rx=%ld.%06ld gap=%d ms\n",
+							ntohl(vph->digest), (long) previous_master_rx_time.tv_sec, (long) previous_master_rx_time.tv_usec,
+							(long) packet_rx_time.tv_sec, (long) packet_rx_time.tv_usec,
+							ast_tvzero(previous_master_rx_time) ? -1 : voter_tvdiff_ms(packet_rx_time, previous_master_rx_time));
 					}
 					ast_mutex_unlock(&master_rx_lock);
 				}
@@ -5496,6 +5552,12 @@ static void *voter_reader(void *data)
 			if (client->digest == htonl(vph->digest)) {
 				client->lastheardtime = packet_rx_time;
 				client->heardfrom = 1;
+				/* This is the configured-client match path, unlike the raw UDP log.
+				 * It records which client's lastheardtime was refreshed by this packet.
+				 */
+				ast_debug(3, "VOTER client RX timestamp: client=%s node=%u digest=%08x peer=%s:%u rx=%ld.%06ld payload=%u\n",
+					client->name, client->nodenum, ntohl(vph->digest), ast_inet_ntoa(sin.sin_addr), ntohs(packet_source_port),
+					(long) packet_rx_time.tv_sec, (long) packet_rx_time.tv_usec, ntohs(vph->payload_type));
 				break;
 			}
 		}
