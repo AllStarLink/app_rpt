@@ -2202,6 +2202,7 @@ static void *TLB_reader(void *data)
 		if (i < 0) {
 			ast_log(LOG_ERROR, "Fatal error, poll returned %d: %s\n", i, strerror(errno));
 			run_forever = 0;
+			ast_mutex_lock(&instp->lock);
 			break;
 		}
 		ast_mutex_lock(&instp->lock);
