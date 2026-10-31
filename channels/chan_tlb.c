@@ -153,6 +153,8 @@ static const char tdesc[] = "TheLinkBox channel driver";
 static char type[] = "tlb";
 
 int run_forever = 1;
+/* Readers start before registration; inbound channels would outlive instances freed on load failure. */
+static int accept_calls;
 
 /*!
  * \brief The Link Box audio packet header.
@@ -2251,7 +2253,7 @@ static void *TLB_reader(void *data)
 									}
 								}
 							}
-							if (!i) { /* if authorized */
+							if (!i && __atomic_load_n(&accept_calls, __ATOMIC_ACQUIRE)) { /* if authorized */
 								i = do_new_call(instp, NULL, call, "UNKNOWN", NULL);
 								if (i < 0) {
 									i = 0;
@@ -2623,6 +2625,7 @@ static void tlb_free_instances(void)
 
 static int unload_module(void)
 {
+	__atomic_store_n(&accept_calls, 0, __ATOMIC_RELEASE);
 	/* First, take us out of the channel loop */
 	ast_channel_unregister(&TLB_tech);
 	ast_cli_unregister_multiple(TLB_cli, sizeof(TLB_cli) / sizeof(struct ast_cli_entry));
@@ -2699,6 +2702,7 @@ static int load_module(void)
 		TLB_tech.capabilities = NULL;
 		return AST_MODULE_LOAD_DECLINE;
 	}
+	__atomic_store_n(&accept_calls, 1, __ATOMIC_RELEASE);
 	return 0;
 }
 
