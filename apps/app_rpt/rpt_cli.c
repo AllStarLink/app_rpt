@@ -398,11 +398,7 @@ static int rpt_do_lstats(int fd, int argc, const char *const *argv)
 					continue;
 				}
 
-				if (l->chan) {
-					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", peer, MAXPEERSTR - 1);
-				} else {
-					strcpy(peer, "(none)");
-				}
+				rpt_link_peer_ip(myrpt, l, peer, sizeof(peer));
 
 				connecttime = ast_tvzero(l->connecttime) ? 0 : ast_tvdiff_ms(now, l->connecttime);
 				hours = connecttime / 3600000L;
@@ -598,11 +594,7 @@ static int rpt_do_xnode(int fd, int argc, const char *const *argv)
 					continue;
 				}
 
-				if (l->chan) {
-					pbx_substitute_variables_helper(l->chan, "${IAXPEER(CURRENTCHANNEL)}", peer, MAXPEERSTR - 1);
-				} else {
-					strcpy(peer, "(none)");
-				}
+				rpt_link_peer_ip(myrpt, l, peer, sizeof(peer));
 				hours = connecttime / 3600000L;
 				connecttime %= 3600000L;
 				minutes = connecttime / 60000L;

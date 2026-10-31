@@ -167,3 +167,13 @@ void *rpt_link_connect(void *data);
  * \param l Link to demote retries
  */
 void rpt_link_demote_retries(struct rpt_link *l);
+
+/*!
+ * \brief Get the peer IP address of a link channel for status output.
+ * \param myrpt Repeater owning the link
+ * \param l Link to query
+ * \param buf Output buffer; "(none)" if the link has no channel, empty if unknown
+ * \param len Size of buf
+ * \note myrpt->lock must not be held when calling.
+ */
+void rpt_link_peer_ip(struct rpt *myrpt, struct rpt_link *l, char *buf, size_t len);
