@@ -1188,15 +1188,25 @@ static int TLB_queryoption(struct ast_channel *chan, int option, void *data, int
 	const char *val;
 	int num_substrings;
 
-	/* Make sure that we got a node number to query */
-	if (ast_strlen_zero(data)) {
-		ast_log(LOG_ERROR, "Node number not supplied.");
-		return result;
-	}
-
 	/* Make sure that we have a valid query option */
 	if (option != TLB_QUERY_NODE_EXISTS && option != TLB_QUERY_GET_CALLSIGN) {
 		ast_log(LOG_ERROR, "Invalid query option - %i.\n", option);
+		return result;
+	}
+
+	/*
+	 * NODE_EXISTS is a boolean probe and is called while DTMF is still being
+	 * collected, so an empty node is "not a TLB node", not an error.
+	 * GET_CALLSIGN requires a node number and an output length.
+	 */
+	if (ast_strlen_zero(data)) {
+		if (option == TLB_QUERY_GET_CALLSIGN) {
+			ast_log(LOG_ERROR, "Node number not supplied.\n");
+		}
+		return result;
+	}
+	if (option == TLB_QUERY_GET_CALLSIGN && (!datalen || *datalen < 1)) {
+		ast_log(LOG_ERROR, "Callsign buffer length not supplied.\n");
 		return result;
 	}
 

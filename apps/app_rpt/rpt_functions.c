@@ -99,7 +99,7 @@ int rpt_sendtext_cb(void *obj, void *arg, int flags)
  */
 static enum rpt_find_node_response rpt_find_node(struct rpt *myrpt, char *digitbuf, char *node_data, size_t node_data_size)
 {
-	if (tlb_query_node_exists(digitbuf)) {
+	if (!ast_strlen_zero(digitbuf) && tlb_query_node_exists(digitbuf)) {
 		/* TLB Node */
 		if (node_data && node_data_size) {
 			snprintf(node_data, node_data_size, "tlb/%s/%s", digitbuf, myrpt->name);
