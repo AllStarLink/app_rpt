@@ -94,6 +94,12 @@ void rpt_link_add(struct ao2_container *links, struct rpt_link *l);
 void rpt_link_remove(struct ao2_container *links, struct rpt_link *l);
 
 /*!
+ * \brief Set link RX state and update the remrx counts.
+ * \note Caller must hold myrpt->lock.
+ */
+void rpt_link_set_lastrx(struct rpt *myrpt, struct rpt_link *l, int rx);
+
+/*!
  * \brief destroy ao2 object
  * \param obj rpt_link object called by the ao2_alloc() destructor function
  */
