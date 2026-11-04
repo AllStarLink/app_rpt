@@ -2155,6 +2155,9 @@ static void *simpleusb_audio_thread(void *arg)
 		start_stream_failed = 0;
 
 		flush_stream_buffer(o);
+		/* COR may still be active across a restart, so the unkey path will not clear this */
+		memset(o->rxsqdelaybuf, 0, sizeof(o->rxsqdelaybuf));
+		o->rxsqdelayidx = 0;
 		o->audio_thread_ready = 1;
 		/* Audio path is up; pair any prior fault with a single recovery log. */
 		simpleusb_log_usb_recovered(o);
