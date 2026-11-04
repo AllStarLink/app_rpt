@@ -1550,6 +1550,10 @@ static int el_hangup(struct ast_channel *chan)
 
 	ast_channel_tech_pvt_set(chan, NULL);
 	ast_setstate(chan, AST_STATE_DOWN);
+	/* Readers may still hold a reference to p after this channel is destroyed */
+	ast_mutex_lock(&p->lock);
+	p->owner = NULL;
+	ast_mutex_unlock(&p->lock);
 	ao2_ref(p, -1);
 
 	return 0;
