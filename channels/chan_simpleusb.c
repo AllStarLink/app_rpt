@@ -126,6 +126,7 @@ static struct ast_jb_conf global_jbconf;
 #define CONFIG "simpleusb.conf"				   /* default config file */
 #define RX_ON_DELAY_MAX 60000				   /* in ms, 60000ms, 60 seconds, 1 minute */
 #define TX_OFF_DELAY_MAX 60000				   /* in ms, 60000ms, 60 seconds, 1 minute */
+#define RX_SQUELCH_DELAY_MAX 500			   /* in ms */
 #define MS_PER_FRAME 20						   /* 20 ms frames */
 #define MS_TO_FRAMES(ms) ((ms) / MS_PER_FRAME) /* convert ms to frames */
 
@@ -237,6 +238,10 @@ struct chan_simpleusb_pvt {
 	int txoffcnt;	/* Counts the number of 20 ms intervals after TX unkey */
 	int rxondelay;	/* This is the value which RX is ignored after RX activity */
 	int txoffdelay; /* This is the value which RX is ignored after TX unkey */
+
+	int rxsquelchdelay; /* ms of RX audio held back and dropped when COR clears */
+	int rxsqdelayidx;
+	short rxsqdelaybuf[RX_SQUELCH_DELAY_MAX * FRAME_SIZE / MS_PER_FRAME];
 
 	int pager;
 	int waspager;
@@ -2553,6 +2558,8 @@ static void *simpleusb_audio_thread(void *arg)
 				};
 
 				o->lastrx = 0;
+				memset(o->rxsqdelaybuf, 0, sizeof(o->rxsqdelaybuf));
+				o->rxsqdelayidx = 0;
 
 				if (o->owner) {
 					ast_queue_frame(o->owner, &wf);
@@ -2608,6 +2615,22 @@ static void *simpleusb_audio_thread(void *arg)
 					*sp1++ = hpass(lpass(*sp++, o->flpr), o->hpx, o->hpy);
 				} else {
 					*sp1++ = lpass(*sp++, o->flpr);
+				}
+			}
+
+			/* Delay RX audio so the squelch tail is still buffered when COR clears */
+			if (o->rxsquelchdelay && o->rxkeyed) {
+				int len = o->rxsquelchdelay * FRAME_SIZE / MS_PER_FRAME;
+				short s;
+
+				sp1 = (short *) (o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET);
+				for (i = 0; i < FRAME_SIZE; i++) {
+					if (o->rxsqdelayidx >= len) {
+						o->rxsqdelayidx = 0;
+					}
+					s = o->rxsqdelaybuf[o->rxsqdelayidx];
+					o->rxsqdelaybuf[o->rxsqdelayidx++] = sp1[i];
+					sp1[i] = s;
 				}
 			}
 
@@ -4248,6 +4271,10 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 		CV_UINT("txoffdelay", o->txoffdelay);
 		if (o->txoffdelay > MS_TO_FRAMES(TX_OFF_DELAY_MAX)) {
 			o->txoffdelay = MS_TO_FRAMES(TX_OFF_DELAY_MAX);
+		}
+		CV_UINT("rxsquelchdelay", o->rxsquelchdelay);
+		if (o->rxsquelchdelay > RX_SQUELCH_DELAY_MAX) {
+			o->rxsquelchdelay = RX_SQUELCH_DELAY_MAX;
 		}
 		CV_F("pager", store_pager(o, (char *) v->value));
 		CV_BOOL("plfilter", o->plfilter);

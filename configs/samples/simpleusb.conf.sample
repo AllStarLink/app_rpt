@@ -63,6 +63,8 @@
 
 ;plfilter = yes             ; enable PL filter
 
+;rxsquelchdelay = 0         ; delayline in ms (0-500) squelch tail eliminator
+
 ;rxondelay = 0              ; Number of 20mSec intervals following the release of PTT.
 							; Uncomment and/or adjust for simplex nodes to eliminate "Ping Ponging"
 							; or "Relay Racing". A positive value here will instruct the usbradio
