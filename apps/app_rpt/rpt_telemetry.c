@@ -925,8 +925,7 @@ static int telem_lookup(struct rpt *myrpt, struct ast_channel *chan, const char 
  * Look up telemetry type (e.g. "unlinkedct", "linkunkeyct") for node and, if
  * available, send the associated telemetry
  */
-static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char *ct_key, const char *node, const char *why,
-	int delay)
+static int telem_send_ct(struct rpt *myrpt, struct ast_channel *chan, const char *ct_key, const char *node, const char *why, int delay)
 {
 	const char *ct = NULL;
 	int res;
