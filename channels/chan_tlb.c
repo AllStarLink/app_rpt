@@ -153,6 +153,8 @@ static const char tdesc[] = "TheLinkBox channel driver";
 static char type[] = "tlb";
 
 int run_forever = 1;
+/* Readers start before registration; inbound channels would outlive instances freed on load failure. */
+static int accept_calls;
 
 /*!
  * \brief The Link Box audio packet header.
@@ -2190,6 +2192,11 @@ static void *TLB_reader(void *data)
 		 * poll for activity
 		 */
 		i = ast_poll(fds, 2, 50);
+		/* Stop was requested during the poll. Leave the datagrams unread. */
+		if (!run_forever) {
+			ast_mutex_lock(&instp->lock);
+			break;
+		}
 		if (i == 0) {
 			ast_mutex_lock(&instp->lock);
 			continue;
@@ -2197,6 +2204,7 @@ static void *TLB_reader(void *data)
 		if (i < 0) {
 			ast_log(LOG_ERROR, "Fatal error, poll returned %d: %s\n", i, strerror(errno));
 			run_forever = 0;
+			ast_mutex_lock(&instp->lock);
 			break;
 		}
 		ast_mutex_lock(&instp->lock);
@@ -2245,7 +2253,7 @@ static void *TLB_reader(void *data)
 									}
 								}
 							}
-							if (!i) { /* if authorized */
+							if (!i && __atomic_load_n(&accept_calls, __ATOMIC_ACQUIRE)) { /* if authorized */
 								i = do_new_call(instp, NULL, call, "UNKNOWN", NULL);
 								if (i < 0) {
 									i = 0;
@@ -2574,11 +2582,18 @@ static int store_config(struct ast_config *cfg, char *ctg)
 	return 0;
 }
 
-static int unload_module(void)
+/* Join readers before closing sockets they may still be using. */
+static void tlb_stop_readers(void)
 {
 	int n;
 
 	run_forever = 0;
+	for (n = 0; n < ninstances; n++) {
+		if (instances[n]->TLB_reader_thread != AST_PTHREADT_NULL) {
+			pthread_join(instances[n]->TLB_reader_thread, NULL);
+			instances[n]->TLB_reader_thread = AST_PTHREADT_NULL;
+		}
+	}
 	for (n = 0; n < ninstances; n++) {
 		if (instances[n]->audio_sock != -1) {
 			close(instances[n]->audio_sock);
@@ -2589,15 +2604,12 @@ static int unload_module(void)
 			instances[n]->ctrl_sock = -1;
 		}
 	}
-	ast_cli_unregister_multiple(TLB_cli, sizeof(TLB_cli) / sizeof(struct ast_cli_entry));
-	/* First, take us out of the channel loop */
-	ast_channel_unregister(&TLB_tech);
-	for (n = 0; n < ninstances; n++) {
-		if (instances[n]->TLB_reader_thread != AST_PTHREADT_NULL) {
-			pthread_join(instances[n]->TLB_reader_thread, NULL);
-			instances[n]->TLB_reader_thread = AST_PTHREADT_NULL;
-		}
-	}
+}
+
+static void tlb_free_instances(void)
+{
+	int n;
+
 	tdestroy(TLB_node_list, free_node);
 	TLB_node_list = NULL;
 	for (n = 0; n < ninstances; n++) {
@@ -2605,7 +2617,20 @@ static int unload_module(void)
 		ast_free(instances[n]->denylist_buf);
 		ast_free(instances[n]->permitlist_buf);
 		ast_free(instances[n]);
+		instances[n] = NULL;
 	}
+	ninstances = 0;
+	run_forever = 1;
+}
+
+static int unload_module(void)
+{
+	__atomic_store_n(&accept_calls, 0, __ATOMIC_RELEASE);
+	/* First, take us out of the channel loop */
+	ast_channel_unregister(&TLB_tech);
+	ast_cli_unregister_multiple(TLB_cli, sizeof(TLB_cli) / sizeof(struct ast_cli_entry));
+	tlb_stop_readers();
+	tlb_free_instances();
 
 	ao2_cleanup(TLB_tech.capabilities);
 	TLB_tech.capabilities = NULL;
@@ -2633,6 +2658,7 @@ static int load_module(void)
 	}
 
 	if (!(TLB_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT))) {
+		ast_config_destroy(cfg);
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	ast_format_cap_append(TLB_tech.capabilities, ast_format_gsm, 0);
@@ -2647,6 +2673,11 @@ static int load_module(void)
 			continue;
 		}
 		if (store_config(cfg, ctg) < 0) {
+			ast_config_destroy(cfg);
+			tlb_stop_readers();
+			tlb_free_instances();
+			ao2_cleanup(TLB_tech.capabilities);
+			TLB_tech.capabilities = NULL;
 			return AST_MODULE_LOAD_DECLINE;
 		}
 	}
@@ -2655,6 +2686,8 @@ static int load_module(void)
 	ast_log(LOG_NOTICE, "Total of %d TheLinkBox instances found\n", ninstances);
 	if (ninstances < 1) {
 		ast_log(LOG_ERROR, "Cannot run TheLinkBox with no instances\n");
+		ao2_cleanup(TLB_tech.capabilities);
+		TLB_tech.capabilities = NULL;
 		return AST_MODULE_LOAD_DECLINE;
 	}
 
@@ -2662,8 +2695,14 @@ static int load_module(void)
 	/* Make sure we can register our channel type */
 	if (ast_channel_register(&TLB_tech)) {
 		ast_log(LOG_ERROR, "Unable to register channel class %s\n", type);
+		tlb_stop_readers();
+		ast_cli_unregister_multiple(TLB_cli, sizeof(TLB_cli) / sizeof(struct ast_cli_entry));
+		tlb_free_instances();
+		ao2_cleanup(TLB_tech.capabilities);
+		TLB_tech.capabilities = NULL;
 		return AST_MODULE_LOAD_DECLINE;
 	}
+	__atomic_store_n(&accept_calls, 1, __ATOMIC_RELEASE);
 	return 0;
 }
 
