@@ -2122,7 +2122,7 @@ static void *simpleusb_audio_thread(void *arg)
 {
 	int cd, sd, src, num_frames, ispager, doleft, doright;
 	PaError res;
-	int i;
+	int i, sqdelaylen;
 	struct chan_simpleusb_pvt *o = arg;
 	struct ast_frame *f = &o->read_f, *f1;
 	time_t now;
@@ -2604,36 +2604,33 @@ static void *simpleusb_audio_thread(void *arg)
 			/* Downsample received audio from 48000 mono to 8000 mono */
 			sp = o->simpleusb_read_buf;
 			sp1 = (short *) (o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET);
+			/* Delay RX audio so the squelch tail is still buffered when COR clears */
+			sqdelaylen = o->rxkeyed ? o->rxsquelchdelay * FRAME_SIZE / MS_PER_FRAME : 0;
 			for (i = 0; i < FRAME_SIZE; i++) {
+				short s;
+
 				(void) lpass(*sp++, o->flpr);
 				(void) lpass(*sp++, o->flpr);
 				(void) lpass(*sp++, o->flpr);
 				(void) lpass(*sp++, o->flpr);
 				(void) lpass(*sp++, o->flpr);
 				if (o->plfilter && o->deemphasis) {
-					*sp1++ = hpass6(deemph(lpass(*sp++, o->flpr), &o->destate), o->hpx, o->hpy);
+					s = hpass6(deemph(lpass(*sp++, o->flpr), &o->destate), o->hpx, o->hpy);
 				} else if (o->deemphasis) {
-					*sp1++ = deemph(lpass(*sp++, o->flpr), &o->destate);
+					s = deemph(lpass(*sp++, o->flpr), &o->destate);
 				} else if (o->plfilter) {
-					*sp1++ = hpass(lpass(*sp++, o->flpr), o->hpx, o->hpy);
+					s = hpass(lpass(*sp++, o->flpr), o->hpx, o->hpy);
 				} else {
-					*sp1++ = lpass(*sp++, o->flpr);
+					s = lpass(*sp++, o->flpr);
 				}
-			}
-
-			/* Delay RX audio so the squelch tail is still buffered when COR clears */
-			if (o->rxsquelchdelay && o->rxkeyed) {
-				int len = o->rxsquelchdelay * FRAME_SIZE / MS_PER_FRAME;
-				short s;
-
-				sp1 = (short *) (o->simpleusb_read_frame_buf + AST_FRIENDLY_OFFSET);
-				for (i = 0; i < FRAME_SIZE; i++) {
-					if (o->rxsqdelayidx >= len) {
+				if (sqdelaylen) {
+					if (o->rxsqdelayidx >= sqdelaylen) {
 						o->rxsqdelayidx = 0;
 					}
-					s = o->rxsqdelaybuf[o->rxsqdelayidx];
-					o->rxsqdelaybuf[o->rxsqdelayidx++] = sp1[i];
-					sp1[i] = s;
+					*sp1++ = o->rxsqdelaybuf[o->rxsqdelayidx];
+					o->rxsqdelaybuf[o->rxsqdelayidx++] = s;
+				} else {
+					*sp1++ = s;
 				}
 			}
 
@@ -4276,7 +4273,9 @@ static struct chan_simpleusb_pvt *store_config(struct ast_config *cfg, const cha
 			o->txoffdelay = MS_TO_FRAMES(TX_OFF_DELAY_MAX);
 		}
 		CV_UINT("rxsquelchdelay", o->rxsquelchdelay);
-		if (o->rxsquelchdelay > RX_SQUELCH_DELAY_MAX) {
+		if (o->rxsquelchdelay < 0) {
+			o->rxsquelchdelay = 0;
+		} else if (o->rxsquelchdelay > RX_SQUELCH_DELAY_MAX) {
 			o->rxsquelchdelay = RX_SQUELCH_DELAY_MAX;
 		}
 		CV_F("pager", store_pager(o, (char *) v->value));
