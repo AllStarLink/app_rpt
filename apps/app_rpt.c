@@ -4823,6 +4823,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		l->lastkeytime = 0;
 		l->thisconnected = 0;
 		rpt_mutex_unlock(&myrpt->lock);
+		rpt_update_links(myrpt);
 		return 1;
 	}
 	if (l->hasconnected && (l->max_retries == MAX_RETRIES_PERM || l->retries < l->max_retries)) {
@@ -4834,6 +4835,7 @@ static int remote_hangup_helper(struct rpt *myrpt, struct rpt_link *l)
 		l->lastkeytime = 0;
 		l->thisconnected = 0;
 		rpt_mutex_unlock(&myrpt->lock);
+		rpt_update_links(myrpt);
 		return 1;
 	}
 
@@ -5124,8 +5126,10 @@ void process_link_channel(struct rpt *myrpt, struct rpt_link *l)
 						}
 						rpt_update_links(myrpt);
 						doconpgm(myrpt, l->name);
-					} else
+					} else {
 						l->reconnects++;
+						rpt_update_links(myrpt);
+					}
 				}
 				/* if RX key */
 				if ((f->subclass.integer == AST_CONTROL_RADIO_KEY) && (l->link_newkey != RADIO_KEY_NOT_ALLOWED)) {
