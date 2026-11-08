@@ -2117,7 +2117,7 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	val = ast_variable_retrieve(cfg, "general", "comport");
-	if (val) {
+	if (!ast_strlen_zero(val)) {
 		comport = ast_strdup(val);
 	} else {
 		comport = NULL;
@@ -2182,7 +2182,7 @@ static int load_module(void)
 		port = ast_strdup(APRS_DEFAULT_PORT);
 	}
 	val = ast_variable_retrieve(cfg, "general", "baudrate");
-	if (val) {
+	if (!ast_strlen_zero(val)) {
 		switch (atoi(val)) {
 		case 2400:
 			baudrate = B2400;
