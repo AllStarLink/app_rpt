@@ -3375,7 +3375,6 @@ static inline void log_unkeyed(struct rpt *myrpt)
 	rpt_mutex_lock(&myrpt->lock);
 	donodelog(myrpt, "TXUNKEY,MAIN");
 	rpt_update_boolean(myrpt, "RPT_TXKEYED", 0);
-	myrpt->last_remote_unkey[0] = '\0'; /* Clear last remote unkey */
 	if (myrpt->p.s[myrpt->p.sysstate_cur].sleepena) {
 		if (myrpt->sleepreq) {
 			myrpt->sleeptimer = 0;
