@@ -2221,6 +2221,15 @@ static int load_module(void)
 		lon_decimal_to_DMS(strtof(def_lon, NULL), general_def_position.longitude, sizeof(general_def_position.longitude));
 		format_def_elevation(def_elev, general_def_position.elevation, sizeof(general_def_position.elevation));
 	}
+	if (gps_source == GPS_SOURCE_NONE) {
+		if (!general_def_position.is_valid) {
+			ast_log(LOG_WARNING, "No GPS receiver or [general] lat/lon in %s, the general APRS beacon has no position\n", config);
+		} else if (ast_true(ast_variable_retrieve(cfg, "general", "ehlert"))) {
+			ast_log(LOG_NOTICE, "No GPS receiver and ehlert is set in %s, the general APRS beacon is not sent\n", config);
+		} else {
+			ast_log(LOG_NOTICE, "No GPS receiver, the general APRS beacon reports the fixed position from %s\n", config);
+		}
+	}
 
 	/* Create the aprs connection thread */
 	if (ast_pthread_create(&aprs_connection_thread_id, NULL, aprs_connection_thread, NULL)) {
