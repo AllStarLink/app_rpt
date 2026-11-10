@@ -2117,7 +2117,7 @@ static int load_module(void)
 		return AST_MODULE_LOAD_DECLINE;
 	}
 	val = ast_variable_retrieve(cfg, "general", "comport");
-	if (val) {
+	if (!ast_strlen_zero(val)) {
 		comport = ast_strdup(val);
 	} else {
 		comport = NULL;
@@ -2182,7 +2182,7 @@ static int load_module(void)
 		port = ast_strdup(APRS_DEFAULT_PORT);
 	}
 	val = ast_variable_retrieve(cfg, "general", "baudrate");
-	if (val) {
+	if (!ast_strlen_zero(val)) {
 		switch (atoi(val)) {
 		case 2400:
 			baudrate = B2400;
@@ -2220,6 +2220,15 @@ static int load_module(void)
 		lat_decimal_to_DMS(strtof(def_lat, NULL), general_def_position.latitude, sizeof(general_def_position.latitude));
 		lon_decimal_to_DMS(strtof(def_lon, NULL), general_def_position.longitude, sizeof(general_def_position.longitude));
 		format_def_elevation(def_elev, general_def_position.elevation, sizeof(general_def_position.elevation));
+	}
+	if (gps_source == GPS_SOURCE_NONE) {
+		if (!general_def_position.is_valid) {
+			ast_log(LOG_WARNING, "No GPS receiver or [general] lat/lon in %s, the general APRS beacon has no position\n", config);
+		} else if (ast_true(ast_variable_retrieve(cfg, "general", "ehlert"))) {
+			ast_log(LOG_NOTICE, "No GPS receiver and ehlert is set in %s, the general APRS beacon is not sent\n", config);
+		} else {
+			ast_log(LOG_NOTICE, "No GPS receiver, the general APRS beacon reports the fixed position from %s\n", config);
+		}
 	}
 
 	/* Create the aprs connection thread */
