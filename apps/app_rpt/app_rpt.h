@@ -1178,6 +1178,7 @@ struct nodelog {
 
 struct statpost {
 	struct rpt *myrpt;
+	char *stats_name;
 	struct ast_str *stats_url;
 };
 

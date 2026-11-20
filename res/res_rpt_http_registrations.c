@@ -220,23 +220,26 @@ static int rpt_registry_read_one(const char *username, const char *item, const c
 
 		break;
 	}
-	AST_RWLIST_UNLOCK(&registrations);
 
 	if (!matches) {
+		AST_RWLIST_UNLOCK(&registrations);
 		return 0;
 	}
 
 	if (family) {
 		ast_copy_string(buf, ast_sockaddr_stringify_addr(match1 ? &match1->us : &match2->us), len);
+		AST_RWLIST_UNLOCK(&registrations);
 		return 0;
 	}
 
 	if (matches > 1) {
 		ast_copy_string(buf, "MULTIPLE", len);
+		AST_RWLIST_UNLOCK(&registrations);
 		return 0;
 	}
 
 	ast_copy_string(buf, ast_sockaddr_stringify_addr(match1 ? &match1->us : &match2->us), len);
+	AST_RWLIST_UNLOCK(&registrations);
 	return 0;
 }
 

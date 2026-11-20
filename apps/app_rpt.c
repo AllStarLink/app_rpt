@@ -1058,14 +1058,21 @@ static const char *http_status_text(long code)
 	}
 }
 
-static int rpt_iax_registry_family(const char *node)
+typedef enum {
+	NONE,
+	IPv4,
+	IPv6,
+	BOTH
+} rpt_iax_registry_family_type;
+
+static rpt_iax_registry_family_type rpt_iax_registry_family(const char *node)
 {
 	char funcbuf[128];
 	char addrbuf[128];
 	struct ast_sockaddr sa;
 
 	if (ast_strlen_zero(node)) {
-		return AF_UNSPEC;
+		return NONE;
 	}
 
 	snprintf(funcbuf, sizeof(funcbuf), "RPT_REGISTRY(%s)", node);
@@ -1079,50 +1086,51 @@ static int rpt_iax_registry_family(const char *node)
 		addrbuf[0] = '\0';
 		if ((ast_func_read(NULL, funcbuf, addrbuf, sizeof(addrbuf)) < 0) || ast_strlen_zero(addrbuf)) {
 			/* if "chan_iax2" module not available OR not registered */
-			return AF_UNSPEC;
+			return NONE;
 		}
 	}
 
 	if (ast_strlen_zero(addrbuf)) {
-		return AF_UNSPEC;
+		return NONE;
 	}
 
 	if (!strcmp(addrbuf, "MULTIPLE")) {
-		return AF_INET6;
+		return BOTH;
 	}
 
 	if (!ast_sockaddr_parse(&sa, addrbuf, 0)) {
-		return AF_UNSPEC;
+		return NONE;
 	}
 
 	if (ast_sockaddr_is_ipv4(&sa)) {
-		return AF_INET;
+		return IPv4;
 	}
 
 	if (ast_sockaddr_is_ipv6(&sa)) {
-		return AF_INET6;
+		return IPv6;
 	}
 
-	return AF_UNSPEC;
+	return NONE;
 }
 
 static void *perform_statpost(void *data)
 {
 	int failed = 0;
 	long rescode = 0;
-	CURL *curl = curl_easy_init();
+	CURL *curl;
 	CURLcode res;
 	char error_buffer[CURL_ERROR_SIZE];
 	struct ast_str *response_msg;
 	struct statpost *sp = (struct statpost *) data;
 	struct rpt *myrpt = sp->myrpt;
 	char *url = ast_str_buffer(sp->stats_url);
-	int family;
+	rpt_iax_registry_family_type family;
 
 	/* identify the address family that was used to register the node */
-	family = rpt_iax_registry_family(myrpt->name);
-	if (family == AF_UNSPEC) {
+	family = rpt_iax_registry_family(sp->stats_name);
+	if (family == NONE) {
 		/* if not registered */
+		ast_free(sp->stats_name);
 		ast_free(sp->stats_url);
 		ast_free(sp);
 		return NULL;
@@ -1130,6 +1138,7 @@ static void *perform_statpost(void *data)
 
 	curl = curl_easy_init();
 	if (!curl) {
+		ast_free(sp->stats_name);
 		ast_free(sp->stats_url);
 		ast_free(sp);
 		return NULL;
@@ -1137,6 +1146,7 @@ static void *perform_statpost(void *data)
 
 	response_msg = ast_str_create(RPT_AST_STR_INIT_SIZE);
 	if (!response_msg) {
+		ast_free(sp->stats_name);
 		ast_free(sp->stats_url);
 		ast_free(sp);
 		curl_easy_cleanup(curl);
@@ -1149,8 +1159,14 @@ static void *perform_statpost(void *data)
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, AST_CURL_USER_AGENT);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error_buffer);
 
-	/* ensure that we post using the same address family that was used to register */
-	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, family == AF_INET ? (long) CURL_IPRESOLVE_V4 : (long) CURL_IPRESOLVE_V6);
+	if (family != BOTH) {
+		/*
+		 * If we registered with a single address family then ensure that we post
+		 * using the same family that was used to register.  If we registered with
+		 * multiple families then the stats can be posted with either.
+		 */
+		curl_easy_setopt(curl, CURLOPT_IPRESOLVE, family == IPv4 ? (long) CURL_IPRESOLVE_V4 : (long) CURL_IPRESOLVE_V6);
+	}
 
 	res = curl_easy_perform(curl);
 	if (res != CURLE_OK) {
@@ -1177,7 +1193,8 @@ static void *perform_statpost(void *data)
 	myrpt->last_statpost_failed = ((failed) ? 1 : 0);
 
 	ast_debug(5, "Response: %s\n", ast_str_buffer(response_msg));
-	ast_free(sp->stats_url); /* Free here since parent is not responsible for it. */
+	ast_free(sp->stats_name);
+	ast_free(sp->stats_url);
 	ast_free(sp);
 	ast_free(response_msg);
 	curl_easy_cleanup(curl);
@@ -1199,12 +1216,18 @@ static void statpost(struct rpt *myrpt, struct ast_str *pairs)
 	if (!sp) {
 		return;
 	}
-
-	sp->stats_url = ast_str_create(RPT_AST_STR_INIT_SIZE);
-	if (!sp->stats_url) {
+	sp->stats_name = ast_strdup(myrpt->name);
+	if (!sp->stats_name) {
 		ast_free(sp);
 		return;
 	}
+	sp->stats_url = ast_str_create(RPT_AST_STR_INIT_SIZE);
+	if (!sp->stats_url) {
+		ast_free(sp->stats_name);
+		ast_free(sp);
+		return;
+	}
+
 	ast_mutex_lock(&myrpt->statpost_lock);
 	seq = ++myrpt->statpost_seqno;
 	ast_mutex_unlock(&myrpt->statpost_lock);
@@ -2548,15 +2571,18 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		ast_log(LOG_WARNING, "attempt_reconnect: cannot find node %s\n", l->name);
 		goto retry;
 	}
-	/* cannot apply to echolink */
 	if (!strncasecmp(tmp, "echolink", 8)) {
-		/* We should not retry this node type */
+		/* do not retry "echolink" */
 		rpt_link_demote_retries(l);
 		goto retry;
 	}
-	/* cannot apply to tlb */
 	if (!strncasecmp(tmp, "tlb", 3)) {
-		/* We should not retry this node type */
+		/* do not retry "tlb" */
+		rpt_link_demote_retries(l);
+		goto retry;
+	}
+	if (parse_node_format(tmp, &s1, &s2, sx, sizeof(sx))) {
+		/* if we cannot parse the node format */
 		rpt_link_demote_retries(l);
 		goto retry;
 	}
@@ -2567,12 +2593,6 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 	}
 	ast_format_cap_append(cap, ast_format_slin, 0);
 
-	if (parse_node_format(tmp, &s1, &s2, sx, sizeof(sx))) {
-		rpt_mutex_lock(&myrpt->lock);
-		l->retrytimer = RETRY_TIMER_MS;
-		rpt_mutex_unlock(&myrpt->lock);
-		return NULL;
-	}
 	snprintf(deststr, sizeof(deststr), "IAX2/%s", s1);
 	tele = strchr(deststr, '/');
 
@@ -7313,6 +7333,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					ast_copy_string(xstr, nodedata, sizeof(xstr));
 					if (parse_node_format(xstr, &s1, &s2, sx, sizeof(sx))) {
 						ast_log(LOG_WARNING, "Specified node %s not in correct format\n", nodedata);
+						ast_config_destroy(cfg);
 						return -1;
 					}
 
