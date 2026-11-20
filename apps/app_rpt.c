@@ -1242,6 +1242,7 @@ static void statpost(struct rpt *myrpt, struct ast_str *pairs)
 	res = ast_pthread_create_detached(&statpost_thread, NULL, perform_statpost, sp);
 	if (res) {
 		ast_log(LOG_ERROR, "Error creating statpost thread: %s\n", strerror(res));
+		ast_free(sp->stats_name);
 		ast_free(sp->stats_url);
 		ast_free(sp);
 	}
