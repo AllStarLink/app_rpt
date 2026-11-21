@@ -7346,8 +7346,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					}
 
 					nodedata[0] = '\0';
-					if (ast_sockaddr_parse(&proxy_addr, myadr, PARSE_PORT_FORBID) &&
-						caller_address_matches(s2, &proxy_addr) == 1) {
+					if (ast_sockaddr_parse(&proxy_addr, myadr, PARSE_PORT_FORBID) && caller_address_matches(s2, &proxy_addr) == 1) {
 						/* one of the calling node's reported addresses matches this proxy */
 						forward_node_lookup(tmp, cfg, nodedata, sizeof(nodedata));
 					}
@@ -7401,8 +7400,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				rpt_forward(chan, s1, b1);
 				return -1;
 			}
-			if (ast_sockaddr_parse(&proxy_addr, myadr, PARSE_PORT_FORBID) &&
-				caller_address_matches(s2, &proxy_addr) == 1) {
+			if (ast_sockaddr_parse(&proxy_addr, myadr, PARSE_PORT_FORBID) && caller_address_matches(s2, &proxy_addr) == 1) {
 				char tmp2[512];
 
 				/* one of the destination node's reported addresses matches this proxy */
