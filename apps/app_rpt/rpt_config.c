@@ -553,7 +553,15 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 		const struct ast_dns_record *record;
 
 		query = ast_dns_query_set_get(queries, i);
+		if (!query) {
+			continue;
+		}
+
 		result = ast_dns_query_get_result(query);
+		if (!result) {
+			continue;
+		}
+
 		for (record = ast_dns_result_get_records(result); record != NULL; record = ast_dns_record_get_next(record)) {
 			size_t data_size = ast_dns_record_get_data_size(record);
 			const unsigned char *data = (unsigned char *) ast_dns_record_get_data(record);
