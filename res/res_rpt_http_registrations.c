@@ -149,6 +149,9 @@ struct http_registry_req {
 
 static AST_RWLIST_HEAD_STATIC(registrations, http_registry_req);
 
+/* protect registration state independently of HTTP requests */
+AST_MUTEX_DEFINE_STATIC(registry_state_lock);
+
 int register_dual_stack;
 
 static int rpt_registry_match_family(const struct http_registry *reg, const char *family)
@@ -207,6 +210,7 @@ static int rpt_registry_read_one(const char *username, const char *item, const c
 	}
 
 	AST_RWLIST_RDLOCK(&registrations);
+	ast_mutex_lock(&registry_state_lock);
 	AST_LIST_TRAVERSE(&registrations, req, entry) {
 		if (strcmp(req->username, username)) {
 			continue;
@@ -226,23 +230,27 @@ static int rpt_registry_read_one(const char *username, const char *item, const c
 	}
 
 	if (!matches) {
+		ast_mutex_unlock(&registry_state_lock);
 		AST_RWLIST_UNLOCK(&registrations);
 		return 0;
 	}
 
 	if (family) {
 		ast_copy_string(buf, ast_sockaddr_stringify_addr(match1 ? &match1->us : &match2->us), len);
+		ast_mutex_unlock(&registry_state_lock);
 		AST_RWLIST_UNLOCK(&registrations);
 		return 0;
 	}
 
 	if (matches > 1) {
 		ast_copy_string(buf, "MULTIPLE", len);
+		ast_mutex_unlock(&registry_state_lock);
 		AST_RWLIST_UNLOCK(&registrations);
 		return 0;
 	}
 
 	ast_copy_string(buf, ast_sockaddr_stringify_addr(match1 ? &match1->us : &match2->us), len);
+	ast_mutex_unlock(&registry_state_lock);
 	AST_RWLIST_UNLOCK(&registrations);
 	return 0;
 }
@@ -461,12 +469,19 @@ static int http_register(struct http_registry *reg)
 			data = ast_json_dump_string(ast_json_object_get(json, "data"));
 			ast_debug(2, "Response: ipaddr=%s, port=%d, refresh=%d, data=%s\n", ipaddr, port, refresh, data);
 			if (data && strstr(data, "successfully registered")) {
-				ast_sockaddr_parse(&reg->us, ipaddr, 0);
-				ast_sockaddr_set_port(&reg->us, port);
+				struct ast_sockaddr us = { 0 };
+
+				ast_sockaddr_parse(&us, ipaddr, 0);
+				ast_sockaddr_set_port(&us, port);
+				ast_mutex_lock(&registry_state_lock);
+				ast_sockaddr_copy(&reg->us, &us);
 				reg->refresh = refresh;
 				reg->registered = 1;
+				ast_mutex_unlock(&registry_state_lock);
 			} else {
+				ast_mutex_lock(&registry_state_lock);
 				reg->registered = 0;
+				ast_mutex_unlock(&registry_state_lock);
 			}
 			if (data) {
 				ast_json_free(data);
@@ -561,8 +576,9 @@ static void *do_refresh(void *varg)
 		ast_debug(3, "Doing periodic registrations\n");
 		AST_RWLIST_RDLOCK(&registrations);
 		AST_LIST_TRAVERSE(&registrations, req, entry) {
-			int bound;
+			int bound, ready;
 
+			ast_mutex_lock(&registry_state_lock);
 			if (HTTP_REGISTRY_WAITING(&req->reg1)) {
 				// re-check binding and start
 				bound = http_register_updated_binding(&req->reg1);
@@ -570,10 +586,13 @@ static void *do_refresh(void *varg)
 					http_register_start(&req->reg1);
 				}
 			}
-			if (HTTP_REGISTRY_READY(&req->reg1)) {
+			ready = HTTP_REGISTRY_READY(&req->reg1);
+			ast_mutex_unlock(&registry_state_lock);
+			if (ready) {
 				http_register(&req->reg1);
 			}
 
+			ast_mutex_lock(&registry_state_lock);
 			if (HTTP_REGISTRY_WAITING(&req->reg2)) {
 				// re-check binding and start
 				bound = http_register_updated_binding(&req->reg2);
@@ -581,7 +600,9 @@ static void *do_refresh(void *varg)
 					http_register_start(&req->reg2);
 				}
 			}
-			if (HTTP_REGISTRY_READY(&req->reg2)) {
+			ready = HTTP_REGISTRY_READY(&req->reg2);
+			ast_mutex_unlock(&registry_state_lock);
+			if (ready) {
 				http_register(&req->reg2);
 			}
 		}
@@ -605,14 +626,24 @@ static void *do_refresh(void *varg)
 #define FORMAT "%-47.47s  %-10.10s  %-47.47s %8d %s\n"
 
 /*! \brief Based on iax2_show_registry from chan_iax2 */
-static void handle_show_registrations_one(struct ast_cli_args *a, struct http_registry *reg)
+static int handle_show_registrations_one(struct ast_cli_args *a, struct http_registry *reg)
 {
 	char host[AST_SOCKADDR_BUFLEN];
 	char perceived[AST_SOCKADDR_BUFLEN];
+	int refresh, registered;
 
+	ast_mutex_lock(&registry_state_lock);
+	if (!HTTP_REGISTRY_READY(reg)) {
+		ast_mutex_unlock(&registry_state_lock);
+		return 0;
+	}
 	ast_copy_string(host, ast_sockaddr_stringify(&reg->addr), sizeof(host));
 	snprintf(perceived, sizeof(perceived), "%s", ast_sockaddr_isnull(&reg->us) ? "<Unregistered>" : ast_sockaddr_stringify(&reg->us));
-	ast_cli(a->fd, FORMAT, host, reg->req->username, perceived, reg->refresh, reg->registered ? "Registered" : "Not Registered");
+	refresh = reg->refresh;
+	registered = reg->registered;
+	ast_mutex_unlock(&registry_state_lock);
+	ast_cli(a->fd, FORMAT, host, reg->req->username, perceived, refresh, registered ? "Registered" : "Not Registered");
+	return 1;
 }
 
 /*! \brief Based on iax2_show_registry from chan_iax2 */
@@ -636,14 +667,8 @@ static char *handle_show_registrations(struct ast_cli_entry *e, int cmd, struct 
 	ast_cli(a->fd, FORMAT2, "Host", "Username", "Perceived", "Refresh", "State");
 	AST_RWLIST_RDLOCK(&registrations);
 	AST_RWLIST_TRAVERSE(&registrations, req, entry) {
-		if (HTTP_REGISTRY_READY(&req->reg1)) {
-			handle_show_registrations_one(a, &req->reg1);
-			counter++;
-		}
-		if (HTTP_REGISTRY_READY(&req->reg2)) {
-			handle_show_registrations_one(a, &req->reg2);
-			counter++;
-		}
+		counter += handle_show_registrations_one(a, &req->reg1);
+		counter += handle_show_registrations_one(a, &req->reg2);
 	}
 	AST_RWLIST_UNLOCK(&registrations);
 	ast_cli(a->fd, "%d HTTP registration%s.\n", counter, ESS(counter));
