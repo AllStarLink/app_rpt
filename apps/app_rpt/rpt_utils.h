@@ -112,15 +112,17 @@ void update_timer(int *timer_ptr, int elap, int end_val);
 int snprintf_append(char *buf, size_t size, size_t *used, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
 
 /*!
- * \brief Parse a node address into destination and extra fields.
+ * \brief Parse a node address into destination, extra, and optional flag fields.
  *
- * Parses strings of the form "deststr,extra".
+ * Parses strings of the form "deststr,extra[,flag]". TLB destinations may omit
+ * the comma and extra field, in which case extra is NULL. An absent flag is NULL.
  *
  *   radio@a.b.c.d/12345,NONE
  *   radio@a.b.c.d:4570/12345,NONE
  *   radio@[aa:bb:cc:...:ff]/12345,NONE
  *   radio@[aa:bb:cc:...:ff]:4570/12345,NONE
  *   radio@(a.b.c.d,[aa:bb:cc:...:ff]):4569/491303,NONE
+ *   radio@mycall.dyndns.org:4569/63001,NONE,VOTE    ; simple voter
  *   echolink/el0/009999,009999
  *   tlb/1101/12345
  *
@@ -129,11 +131,13 @@ int snprintf_append(char *buf, size_t size, size_t *used, const char *fmt, ...) 
  *
  * \param nodestr Node address string to parse; must be a valid, writable string.
  * \param deststr Output pointer for the destination string.
- * \param extra Output pointer for the string following the top-level comma.
+ * \param extra Output pointer for the reported address field, excluding the flag.
+ * \param flag Output pointer for the optional flag, such as VOTE or yes.
+ * All three output pointers must be non-NULL.
  * \param buf Buffer used when deststr must be rewritten to add the default port.
  * \param len Size of buf.
  *
  * \retval 0 Success.
- * \retval -1 Missing top-level comma separator or malformed destination string.
+ * \retval -1 Missing top-level comma separator for a non-TLB destination or malformed destination string.
  */
-int parse_node_format(char *nodestr, char **deststr, char **extra, char *buf, size_t len);
+int parse_node_format(char *nodestr, char **deststr, char **extra, char **flag, char *buf, size_t len);

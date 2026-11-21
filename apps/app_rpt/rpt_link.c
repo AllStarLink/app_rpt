@@ -803,7 +803,7 @@ void rpt_update_links(struct rpt *myrpt)
 
 void *rpt_link_connect(void *data)
 {
-	char *s1, *s2, *tele, *cp;
+	char *s1, *s2, *flag, *tele, *cp;
 	char deststr[325] = "", modechange = 0;
 	char sx[320];
 	char **strs; /* List of pointers to links in link list string */
@@ -850,11 +850,11 @@ void *rpt_link_connect(void *data)
 	ast_debug(2, "Connect attempt to node %s, Mode = %s, Connection type: %s\n", node,
 		connect_data->mode ? "Transceive" : "Monitor", connect_data->perma ? "Permalink" : "Normal");
 
-	if (parse_node_format(connect_data->nodedata, &s1, &s2, sx, sizeof(sx))) {
+	if (parse_node_format(connect_data->nodedata, &s1, &s2, &flag, sx, sizeof(sx))) {
 		goto cleanup;
 	}
 
-	if (s2 && strcmp(s2, "VOTE") == 0) {
+	if (flag && strcmp(flag, "VOTE") == 0) {
 		voterlink = 1;
 		ast_debug(1, "NODE is a VOTER.\n");
 	}
@@ -943,7 +943,7 @@ void *rpt_link_connect(void *data)
 	l->thisconnected = 0;
 	voxinit_link(l, 1);
 	ast_copy_string(l->name, node, sizeof(l->name));
-	l->isremote = (s2 && ast_true(s2));
+	l->isremote = (flag && ast_true(flag));
 	if (modechange) {
 		l->connected = 1;
 	}

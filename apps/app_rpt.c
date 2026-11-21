@@ -2557,7 +2557,7 @@ static int handle_remote_phone_dtmf(struct rpt *myrpt, char c, char *restrict ke
 
 static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 {
-	char *s1, *s2, *tele;
+	char *s1, *s2, *flag, *tele;
 	char tmp[300], deststr[325] = "";
 	char sx[320];
 	struct ast_frame *f1;
@@ -2582,7 +2582,7 @@ static void *attempt_reconnect(struct rpt *myrpt, struct rpt_link *l)
 		rpt_link_demote_retries(l);
 		goto retry;
 	}
-	if (parse_node_format(tmp, &s1, &s2, sx, sizeof(sx))) {
+	if (parse_node_format(tmp, &s1, &s2, &flag, sx, sizeof(sx))) {
 		/* if we cannot parse the node format */
 		rpt_link_demote_retries(l);
 		goto retry;
@@ -7124,10 +7124,10 @@ static int caller_address_matches(const char *hostspec, const struct ast_sockadd
 static int parse_caller(const char *b1, char *hisip, char *s)
 {
 	char sx[320];
-	char *s1, *s2, *host;
+	char *s1, *s2, *flag, *host;
 	struct ast_sockaddr caller;
 
-	if (parse_node_format(s, &s1, &s2, sx, sizeof(sx))) {
+	if (parse_node_format(s, &s1, &s2, &flag, sx, sizeof(sx))) {
 		ast_log(LOG_WARNING, "Reported node %s not in correct format\n", b1);
 		return -1;
 	}
@@ -7313,7 +7313,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 	if (myrpt == NULL) {
 		char dstr[1024];
 		const char *myadr, *mypfx;
-		char *s1, *s2;
+		char *s1, *s2, *flag;
 		char nodedata[100], xstr[100], tmp1[100];
 		struct ast_config *cfg;
 
@@ -7332,7 +7332,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					forward_node_lookup(b1, cfg, nodedata, sizeof(nodedata));
 
 					ast_copy_string(xstr, nodedata, sizeof(xstr));
-					if (parse_node_format(xstr, &s1, &s2, sx, sizeof(sx))) {
+					if (parse_node_format(xstr, &s1, &s2, &flag, sx, sizeof(sx))) {
 						ast_log(LOG_WARNING, "Specified node %s not in correct format\n", nodedata);
 						ast_config_destroy(cfg);
 						return -1;
@@ -7381,7 +7381,7 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				}
 			}
 
-			if (parse_node_format(xstr, &s1, &s2, sx, sizeof(sx))) {
+			if (parse_node_format(xstr, &s1, &s2, &flag, sx, sizeof(sx))) {
 				ast_log(LOG_WARNING, "Specified node %s not in correct format\n", nodedata);
 				ast_config_destroy(cfg);
 				return -1;

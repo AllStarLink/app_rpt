@@ -354,7 +354,7 @@ void update_timer(int *timer_ptr, int elap, int end_val)
 	}
 }
 
-int parse_node_format(char *nodestr, char **deststr, char **extra, char *buf, size_t len)
+int parse_node_format(char *nodestr, char **deststr, char **extra, char **flag, char *buf, size_t len)
 {
 	char *p;
 	char *hostspec;
@@ -363,6 +363,7 @@ int parse_node_format(char *nodestr, char **deststr, char **extra, char *buf, si
 
 	*deststr = NULL;
 	*extra = NULL;
+	*flag = NULL;
 
 	/*
 	 * Find the comma separating the destination from the extra. If the destination
@@ -387,12 +388,33 @@ int parse_node_format(char *nodestr, char **deststr, char **extra, char *buf, si
 	p = strchr(p, ',');
 	if (!p) {
 		/* if no comma */
+		if (!strncasecmp(nodestr, "tlb/", 4)) {
+			/* accept TLB destinations without an extra field */
+			*deststr = nodestr;
+			return 0;
+		}
 		return -1;
 	}
 	*p = '\0';
 
 	*deststr = nodestr;
 	*extra = p + 1;
+
+	/* split the optional flag after the reported address or address list */
+	p = *extra;
+	if (*p == '(') {
+		p = strchr(p + 1, ')');
+		if (!p) {
+			/* if no matching close paren */
+			return -1;
+		}
+		p++;
+	}
+	p = strchr(p, ',');
+	if (p) {
+		*p = '\0';
+		*flag = p + 1;
+	}
 
 	/*
 	 * Only rewrite user@hostspec/extra forms.
