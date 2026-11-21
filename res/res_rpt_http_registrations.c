@@ -122,6 +122,7 @@ static int register_interval;
 struct http_registry {
 	struct http_registry_req *req;	 /*!< http_registry_req we belong to; NULL if not configured */
 	char registered;				 /*!< Registered==1 */
+	char started;					 /*!< address resolved or DNS manager initialized */
 	struct ast_dnsmgr_entry *dnsmgr; /*!< DNS refresh manager */
 	struct ast_sockaddr addr;		 /*!< Who we connect to for registration purposes */
 	int refresh;					 /*!< How often to refresh */
@@ -139,9 +140,12 @@ struct http_registry_req {
 	int iaxport;				   /*!< Our IAX2 bindport */
 };
 
-#define HTTP_REGISTRY_WAITING(reg) ((reg)->req && !(reg)->dnsmgr && ((reg)->addr.ss.ss_family != AF_UNSPEC))
-#define HTTP_REGISTRY_ENABLED(reg) ((reg)->req && (reg)->dnsmgr)
-#define HTTP_REGISTRY_READY(reg) ((reg)->req && (reg)->dnsmgr && !ast_sockaddr_isnull(&(reg)->addr))
+/* waiting to initialize; recheck IAX bindings and retry server address lookup */
+#define HTTP_REGISTRY_WAITING(reg) ((reg)->req && !(reg)->started)
+/* initialized; check registration state or release any DNS manager during cleanup */
+#define HTTP_REGISTRY_ENABLED(reg) ((reg)->req && (reg)->started)
+/* initialized with a resolved address; registration requests can be sent */
+#define HTTP_REGISTRY_READY(reg) (HTTP_REGISTRY_ENABLED(reg) && !ast_sockaddr_isnull(&(reg)->addr))
 
 static AST_RWLIST_HEAD_STATIC(registrations, http_registry_req);
 
@@ -508,6 +512,8 @@ static int http_register_start(struct http_registry *reg)
 		return -1;
 	}
 
+	reg->started = reg->dnsmgr || !ast_sockaddr_isnull(&reg->addr);
+
 	http_register_set_port(reg);
 
 	reg->refresh = DEFAULT_REGISTER_INTERVAL;
@@ -528,7 +534,7 @@ static int http_register_updated_binding(struct http_registry *reg)
 		ast_copy_string(buf, "0", sizeof(buf));
 	}
 
-	old_bound = (reg->dnsmgr != NULL);
+	old_bound = reg->started;
 	switch (reg->addr.ss.ss_family) {
 	case AF_INET:
 		bound = !strcmp(buf, "ipv4") || !strcmp(buf, "both");

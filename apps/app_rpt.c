@@ -7314,8 +7314,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 		char dstr[1024];
 		const char *myadr, *mypfx;
 		char *s1, *s2, *flag;
-		char nodedata[100], xstr[100], tmp1[100];
+		char nodedata[MAXNODESTR], xstr[MAXNODESTR], tmp1[MAXNODESTR];
 		struct ast_config *cfg;
+		struct ast_sockaddr proxy_addr;
 
 		myadr = NULL;
 		b1 = ast_channel_caller(chan)->id.number.str;
@@ -7345,7 +7346,9 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 					}
 
 					nodedata[0] = '\0';
-					if (!strcmp(s2, myadr)) {
+					if (ast_sockaddr_parse(&proxy_addr, myadr, PARSE_PORT_FORBID) &&
+						caller_address_matches(s2, &proxy_addr) == 1) {
+						/* one of the calling node's reported addresses matches this proxy */
 						forward_node_lookup(tmp, cfg, nodedata, sizeof(nodedata));
 					}
 				}
@@ -7398,9 +7401,11 @@ static int rpt_exec(struct ast_channel *chan, const char *data)
 				rpt_forward(chan, s1, b1);
 				return -1;
 			}
-			if (!strcmp(myadr, s2)) { /* if we have it.. */
+			if (ast_sockaddr_parse(&proxy_addr, myadr, PARSE_PORT_FORBID) &&
+				caller_address_matches(s2, &proxy_addr) == 1) {
 				char tmp2[512];
 
+				/* one of the destination node's reported addresses matches this proxy */
 				ast_copy_string(tmp2, tmp, sizeof(tmp2));
 				if (options && callstr)
 					snprintf(tmp2, sizeof(tmp2), "0%s%s", callstr, tmp);

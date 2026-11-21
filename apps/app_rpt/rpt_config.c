@@ -591,13 +591,18 @@ static int node_lookup_bydns(const char *node, char *nodedata, size_t nodedatale
 	}
 
 	if (addr_v6[0] && addr_v4[0]) {
-		snprintf(nodedata, nodedatalength, "radio@([%s],%s):%d/%s,([%s],%s)", addr_v6, addr_v4, iaxport, node, addr_v6, addr_v4);
+		res = snprintf(nodedata, nodedatalength, "radio@([%s],%s):%d/%s,([%s],%s)", addr_v6, addr_v4, iaxport, node, addr_v6, addr_v4);
 	} else if (addr_v6[0]) {
-		snprintf(nodedata, nodedatalength, "radio@[%s]:%d/%s,[%s]", addr_v6, iaxport, node, addr_v6);
+		res = snprintf(nodedata, nodedatalength, "radio@[%s]:%d/%s,[%s]", addr_v6, iaxport, node, addr_v6);
 	} else if (addr_v4[0]) {
-		snprintf(nodedata, nodedatalength, "radio@%s:%d/%s,%s", addr_v4, iaxport, node, addr_v4);
+		res = snprintf(nodedata, nodedatalength, "radio@%s:%d/%s,%s", addr_v4, iaxport, node, addr_v4);
 	} else {
 		ast_debug(4, "No A/AAAA results returned for %s\n", hostname);
+		return -1;
+	}
+
+	if (res < 0 || (size_t) res >= nodedatalength) {
+		nodedata[0] = '\0';
 		return -1;
 	}
 
