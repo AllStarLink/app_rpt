@@ -125,6 +125,7 @@ struct http_registry {
 	char started;					 /*!< address resolved or DNS manager initialized */
 	struct ast_dnsmgr_entry *dnsmgr; /*!< DNS refresh manager */
 	struct ast_sockaddr addr;		 /*!< Who we connect to for registration purposes */
+	int family;						 /*!< family filter used to initialize the address lookup */
 	int refresh;					 /*!< How often to refresh */
 	struct ast_sockaddr us;			 /*!< Who the server thinks we are */
 };
@@ -340,6 +341,7 @@ static struct ast_str *curl_post(struct http_registry *reg, const char *url, con
 	CURLcode res;
 	struct ast_str *str;
 	long int http_code;
+	long curl_ipresolve;
 	struct curl_slist *slist = NULL;
 	char curl_errbuf[CURL_ERROR_SIZE + 1] = "";
 
@@ -367,7 +369,10 @@ static struct ast_str *curl_post(struct http_registry *reg, const char *url, con
 	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 15L);
 	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_errbuf);
-	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, ast_sockaddr_ipv4(&reg->addr) ? (long) CURL_IPRESOLVE_V4 : (long) CURL_IPRESOLVE_V6);
+	ast_mutex_lock(&registry_state_lock);
+	curl_ipresolve = ast_sockaddr_ipv4(&reg->addr) ? (long) CURL_IPRESOLVE_V4 : (long) CURL_IPRESOLVE_V6;
+	ast_mutex_unlock(&registry_state_lock);
+	curl_easy_setopt(curl, CURLOPT_IPRESOLVE, curl_ipresolve);
 
 	res = curl_easy_perform(curl);
 	if (res != CURLE_OK) {
@@ -494,6 +499,12 @@ static int http_register(struct http_registry *reg)
 			data = ast_json_dump_string(ast_json_object_get(json, "data"));
 			ast_debug(2, "Response: ipaddr=%s, port=%d, refresh=%d, data=%s\n", ipaddr, port, refresh, data);
 			if (data && strstr(data, "successfully registered") && !ast_strlen_zero(ipaddr) && ast_sockaddr_parse(&us, ipaddr, 0)) {
+				struct ast_sockaddr mapped = { 0 };
+
+				if (ast_sockaddr_ipv4_mapped(&us, &mapped)) {
+					/* store IPv4-mapped addresses as IPv4 for registry family checks */
+					ast_sockaddr_copy(&us, &mapped);
+				}
 				ast_sockaddr_set_port(&us, port);
 				registered = 1;
 			}
@@ -512,6 +523,12 @@ done:
 		reg->refresh = refresh;
 	} else {
 		ast_sockaddr_setnull(&reg->us);
+		if (!reg->dnsmgr) {
+			/* retry unmanaged lookups with the original family filter */
+			reg->started = 0;
+			ast_sockaddr_setnull(&reg->addr);
+			reg->addr.ss.ss_family = reg->family;
+		}
 	}
 	reg->registered = registered;
 	ast_mutex_unlock(&registry_state_lock);
@@ -537,6 +554,16 @@ static void http_register_set_port(struct http_registry *reg)
 	ast_sockaddr_set_port(&reg->addr, port);
 }
 
+static void http_register_address_update(struct ast_sockaddr *old_addr, struct ast_sockaddr *new_addr, void *data)
+{
+	(void) data;
+
+	/* publish DNS updates under the same lock used by registry readers */
+	ast_mutex_lock(&registry_state_lock);
+	ast_sockaddr_copy(old_addr, new_addr);
+	ast_mutex_unlock(&registry_state_lock);
+}
+
 /*! \brief Based on iax2_register_start from chan_iax2 */
 static int http_register_start(struct http_registry *reg)
 {
@@ -544,19 +571,17 @@ static int http_register_start(struct http_registry *reg)
 	int ret;
 
 	old_flags = ast_sockaddr_resolve_flags_suppress(AST_SOCKADDR_RESOLVE_FLAG_SUPPRESS_EAI_NONAME_LOGS);
-	ret = ast_dnsmgr_lookup(reg->req->hostname, &reg->addr, &reg->dnsmgr, NULL);
+	ret = ast_dnsmgr_lookup_cb(reg->req->hostname, &reg->addr, &reg->dnsmgr, NULL, http_register_address_update, NULL);
 	ast_sockaddr_resolve_flags_set(old_flags);
 
 	if (ret < 0) {
 		return -1;
 	}
 
-	http_register_set_port(reg);
-
-	reg->refresh = DEFAULT_REGISTER_INTERVAL;
-
 	/* publish initialization after the server address and refresh interval are ready */
 	ast_mutex_lock(&registry_state_lock);
+	http_register_set_port(reg);
+	reg->refresh = DEFAULT_REGISTER_INTERVAL;
 	reg->started = reg->dnsmgr || !ast_sockaddr_isnull(&reg->addr);
 	ast_mutex_unlock(&registry_state_lock);
 
@@ -567,7 +592,7 @@ static int http_register_start(struct http_registry *reg)
 static int http_register_updated_binding(struct http_registry *reg)
 {
 	char buf[8];
-	int bound, old_bound;
+	int bound, old_bound, family;
 
 	/* get current bindings from chan_iax2 */
 	buf[0] = '\0';
@@ -576,17 +601,37 @@ static int http_register_updated_binding(struct http_registry *reg)
 		ast_copy_string(buf, "0", sizeof(buf));
 	}
 
+	ast_mutex_lock(&registry_state_lock);
 	old_bound = reg->started;
-	switch (reg->addr.ss.ss_family) {
+	family = reg->addr.ss.ss_family;
+	switch (family) {
 	case AF_INET:
 		bound = !strcmp(buf, "ipv4") || !strcmp(buf, "both");
 		break;
 	case AF_INET6:
 		bound = !strcmp(buf, "ipv6") || !strcmp(buf, "both");
 		break;
+	case AF_UNSPEC:
+		/* restrict a single registration to the families with active IAX listeners */
+		if (!strcmp(buf, "ipv4")) {
+			family = AF_INET;
+			bound = 1;
+		} else if (!strcmp(buf, "ipv6")) {
+			family = AF_INET6;
+			bound = 1;
+		} else {
+			bound = !strcmp(buf, "both");
+		}
+		break;
 	default:
-		bound = 1;
+		bound = 0;
 	}
+	if (!old_bound) {
+		if (bound) {
+			reg->addr.ss.ss_family = family;
+		}
+	}
+	ast_mutex_unlock(&registry_state_lock);
 
 	return (!old_bound && bound);
 }
@@ -754,6 +799,8 @@ static int http_append_register_one(struct http_registry_req *req, struct http_r
 	int bound;
 	int ret;
 
+	reg->family = family;
+
 	if (ast_sockaddr_parse(&server, req->hostname, PARSE_PORT_FORBID)) {
 		if (family != AF_UNSPEC && family != server.ss.ss_family) {
 			/* a numeric server IP cannot be used by the other address family */
@@ -814,7 +861,7 @@ static int http_append_register(const char *hostname, const char *username, cons
 	}
 
 	if (porta) {
-		sscanf(porta, "%5d", &req->hostport);
+		ast_str_to_int(porta, &req->hostport);
 	}
 
 	iaxport = get_bindport();
@@ -880,9 +927,13 @@ static int parse_register(const char *value, int lineno)
 		return -1;
 	}
 
-	if (porta && !atoi(porta)) {
-		ast_log(LOG_WARNING, "%s is not a valid port number at line %d\n", porta, lineno);
-		return -1;
+	if (porta) {
+		int port;
+
+		if (ast_str_to_int(porta, &port) || port < 1 || port > 65535) {
+			ast_log(LOG_WARNING, "%s is not a valid port number at line %d\n", porta, lineno);
+			return -1;
+		}
 	}
 
 	ast_debug(1, "Loaded HTTP registration: %s\n", value);
