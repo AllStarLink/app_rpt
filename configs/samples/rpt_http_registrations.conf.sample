@@ -1,5 +1,8 @@
 [general]
+;register_interval = 180                          ; every 3 minutes
+
+;register_dual_stack = yes                        ; Register IPv4 *and* IPv6
 
 [registrations]
-;register => 1999:12345@register.allstarlink.org	; This must be changed to your node number, password
+;register => 1999:12345@register.allstarlink.org  ; This must be changed to your node number, password
 ;register => 1998:12345@register.allstarlink.org
